@@ -68,21 +68,25 @@ void estimate(dolfin::Function& e,
             bc->gather(boundary_values[0]);
     }
 
+    // Used in Dirichlet BC application.
+    auto dofs_a0 = dofmaps_a[0]->cell_dofs(0);
+    auto dofs_a1 = dofmaps_a[1]->cell_dofs(0);
+    // Used in insertion into global vector.
+    auto dofs_L = dofmap_L->cell_dofs(0);
+
+    A_e.resize(dofs_a0.size(), dofs_a1.size());
+    b_e.resize(dofs_L.size(), 1);
+
     for (CellIterator cell(*mesh); !cell.end(); ++cell)
     {
         dolfin_assert(!cell->is_ghost());
 
         // Used in Dirichlet BC application.
         auto dofs_a0 = dofmaps_a[0]->cell_dofs(cell->index());
-        // Not used.
         auto dofs_a1 = dofmaps_a[1]->cell_dofs(cell->index());
         // Used in insertion into global vector.
         auto dofs_L = dofmap_L->cell_dofs(cell->index());
         dofs[0] = ArrayView<const dolfin::la_index>(dofs_L.size(), dofs_L.data());
-
-        // Move outside loop?
-        A_e.resize(dofs_a0.size(), dofs_a1.size());
-        b_e.resize(dofs_L.size(), 1);
 
         cell->get_coordinate_dofs(coordinate_dofs);
 
@@ -135,6 +139,5 @@ void estimate(dolfin::Function& e,
 
 PYBIND11_MODULE(cpp, m)
 {
-    // TODO: Make bcs kwarg?
     m.def("estimate", &estimate, "Compute Bank-Weiser estimator");
 }
