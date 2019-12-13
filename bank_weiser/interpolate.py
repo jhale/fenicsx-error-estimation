@@ -1,5 +1,4 @@
 import numpy as np
-from petsc4py import PETSc
 from dolfin import *
 
 def local_interpolation_to_V0(V_f_global, V_g_global):
