@@ -5,6 +5,11 @@ from dolfin.fem.assembling import _create_dolfin_form
 import bank_weiser.cpp as cpp
 
 def estimate(a_e, L_e, N, bcs=[]):
+    try:
+        len(bcs)
+    except TypeError:
+        bcs = [bcs]
+
     a_e_dolfin = _create_dolfin_form(a_e)
     L_e_dolfin = _create_dolfin_form(L_e)
 
