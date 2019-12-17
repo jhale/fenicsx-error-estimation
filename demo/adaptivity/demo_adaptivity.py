@@ -20,20 +20,20 @@ def main():
         print("Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
-    for i in range(0, 8):
+    for i in range(0, 7):
         u_h = solve(mesh)
-        t = Timer("Estimate")
+        error = errornorm(u_exact, u_h, "H10")
+        print(error)
+
         eta_h = estimate(u_h)
-        del t
-        t = Timer("Mark")
+        error_bw = np.sqrt(eta_h.vector().sum())
+        print(error_bw)
+
         markers = mark(eta_h, 0.1)
-        del t
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
-
-    list_timings(TimingClear.clear, [TimingType.wall])
 
 def solve(mesh):
     V = FunctionSpace(mesh, "CG", k)
