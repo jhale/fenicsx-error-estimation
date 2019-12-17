@@ -20,11 +20,18 @@ def main():
         print("Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
-    for i in range(0, 7):
+
+    for i in range(0, 8):
         V = FunctionSpace(mesh, "CG", k)
         u_h = primal_solve(V)
         with XDMFFile("output/u_h_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(u_h)
+
+        J_h = assemble(J(u_h))
+
+        V_f = FunctionSpace(mesh, "CG", 3)
+        u_exact_V_f = interpolate(u_exact, V_f)
+        J_exact = assemble(J(u_exact_V_f))
 
         z_h = dual_solve(u_h)
         with XDMFFile("output/z_h_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -71,31 +78,35 @@ def primal_solve(V):
 
     return u_h
 
-def dual_solve(u_h):
-    V = u_h.function_space()
-
-    z = TrialFunction(V)
-    v = TestFunction(V)
-
-    eps_f = 0.2
-    centre = 0.4
+def J(v):
+    eps_f = 0.35
+    centre = 0.2
     cpp_f = """
-    ((x[0] - centre)/eps_f)*((x[0] - centre)/eps_f) +((x[1] - centre)/eps_f)*((x[1] - centre)/eps_f) < 1.0 ? 
-    (1.0/0.4665123965446233)*pow(eps_f, -2.0)*
+    ((x[0] - centre)/eps_f)*((x[0] - centre)/eps_f) + ((x[1] - centre)/eps_f)*((x[1] - centre)/eps_f) < 1.0 ? 
+    (1.0)*pow(eps_f, -2.0)*
     exp(-1.0/(1.0 - (((x[0] - centre)/eps_f)*((x[0] - centre)/eps_f) + ((x[1] - centre)/eps_f)*((x[1] - centre)/eps_f)))) :
     0.0"""
 
     c = Expression(cpp_f, eps_f=eps_f, centre=centre, degree=3)
     J = inner(c, v)*dx
 
+    return J
+
+def dual_solve(u_h):
+    V = u_h.function_space()
+
+    z = TrialFunction(V)
+    v = TestFunction(V)
+
     a = inner(grad(z), grad(v))*dx
+    J_v = J(v)
 
     def all_boundary(x, on_boundary):
         return on_boundary
 
     bc = DirichletBC(V, Constant(0.0), all_boundary)
 
-    A, b = assemble_system(a, J, bcs=bc)
+    A, b = assemble_system(a, J_v, bcs=bc)
 
     z_h = Function(V, name="z_h")
     solver = PETScLUSolver()

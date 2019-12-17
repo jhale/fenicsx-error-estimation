@@ -23,11 +23,9 @@ def main():
     for i in range(0, 7):
         u_h = solve(mesh)
         error = errornorm(u_exact, u_h, "H10")
-        print(error)
 
         eta_h = estimate(u_h)
         error_bw = np.sqrt(eta_h.vector().sum())
-        print(error_bw)
 
         markers = mark(eta_h, 0.1)
         mesh = refine(mesh, markers)
