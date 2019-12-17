@@ -43,7 +43,7 @@ N = local_interpolation_to_V0(V_f, V_g)
 e = TrialFunction(V_f)
 v = TestFunction(V_f)
 
-bcs = [DirichletBC(V_f, Constant(0.0), boundaries, 0)]
+bc = DirichletBC(V_f, Constant(0.0), boundaries, 0)
 n = FacetNormal(mesh)
 a_e = inner(grad(e), grad(v))*dx
 L_e = inner(f + div(grad(u_h)), v)*dx + \
@@ -53,18 +53,12 @@ e_h = estimate(a_e, L_e, N, bcs)
 error = norm(e_h, "H10")
 
 # Computation of local error indicator
-
 V_e = FunctionSpace(mesh, "DG", 0)
-u = TrialFunction(V_e)
 v = TestFunction(V_e)
 
-vol = CellVolume(mesh)
-a = inner(u, v)*dx
-L = inner(inner(grad(e_h), grad(e_h))*vol, v)*dx
-
-eta = Function(V_e)
-solver = LocalSolver(a, L, solver_type=LocalSolver.SolverType.Cholesky)
-solver.solve_local_rhs(eta)
+eta_h = Function(V_e)
+eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+eta_h.vector()[:] = eta
 
 u_exact = Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree = k + 3)
 
@@ -75,9 +69,9 @@ with XDMFFile("output/e_h.xdmf") as f:
     f.write_checkpoint(e_h, "Residual solution")
 
 with XDMFFile("output/eta.xdmf") as f:
-    f.write_checkpoint(eta, "Element-wise estimator")
+    f.write_checkpoint(eta_h, "Element-wise estimator")
 
-error_bw = np.sqrt(eta.vector().sum())
+error_bw = np.sqrt(eta_h.vector().sum())
 error_exact = errornorm(u_exact, u_h, "H10")
 
 print("Exact error: {}".format(error_exact))
