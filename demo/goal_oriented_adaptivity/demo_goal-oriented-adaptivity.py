@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 
 from dolfin import *
 import ufl
@@ -14,6 +15,8 @@ with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
 k = 1
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), degree=5)
 
+# Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
+J_fine = 0.2010229183
 
 def main():
     mesh = Mesh()
@@ -25,17 +28,15 @@ def main():
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
-    for i in range(0, 5):
+    results = []
+    for i in range(0, 15):
+        result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = primal_solve(V)
         with XDMFFile("output/u_h_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(u_h)
 
         J_h = assemble(J(u_h))
-
-        V_f = FunctionSpace(mesh, "CG", 3)
-        u_exact_V_f = interpolate(u_exact, V_f)
-        J_exact = assemble(J(u_exact_V_f))
 
         z_h = dual_solve(u_h)
         with XDMFFile("output/z_h_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -54,11 +55,26 @@ def main():
             f.write(eta_hw)
 
         markers = bank_weiser.mark(eta_hw, 0.1)
+        error_hu = np.sqrt(eta_hu.vector().sum())
+        error_hz = np.sqrt(eta_hz.vector().sum())
+
+        result["J_h"] = J_h
+        result["error"] = np.abs(J_h - J_fine)
+        result["estimated_error"] = error_hu*error_hz
+        result["hmin"] = mesh.hmin()
+        result["hmax"] = mesh.hmax()
+        result["num_dofs"] = V.dim()
 
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
+
+        results.append(result)
+
+    df = pd.DataFrame(results)
+    df.to_pickle("output/results.pkl")
+    print(df)
 
 
 def primal_solve(V):
@@ -157,7 +173,6 @@ def estimate(u_h):
     eta_h.vector()[:] = eta
 
     return eta_h
-
 
 if __name__ == "__main__":
     main()
