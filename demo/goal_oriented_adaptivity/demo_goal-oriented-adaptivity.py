@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 
 from dolfin import *
@@ -5,23 +7,25 @@ import ufl
 
 import bank_weiser
 
-with open("exact_solution.h", "r") as f:
+current_dir = os.path.dirname(os.path.realpath(__file__))
+with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
     u_exact_code = f.read()
 
 k = 1
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), degree=5)
 
+
 def main():
     mesh = Mesh()
     try:
-        with XDMFFile(MPI.comm_world, 'mesh.xdmf') as f:
+        with XDMFFile(MPI.comm_world, os.path.join(current_dir, 'mesh.xdmf')) as f:
             f.read(mesh)
     except:
-        print("Generate the mesh using `python3 generate_mesh.py` before running this script.")
+        print(
+            "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
-
-    for i in range(0, 8):
+    for i in range(0, 5):
         V = FunctionSpace(mesh, "CG", k)
         u_h = primal_solve(V)
         with XDMFFile("output/u_h_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -45,16 +49,17 @@ def main():
         with XDMFFile("output/eta_hz_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_hz)
 
-        eta_hw = weighted_estimator(eta_hu, eta_hz)
+        eta_hw = bank_weiser.weighted_estimate(eta_hu, eta_hz)
         with XDMFFile("output/eta_hw_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_hw)
 
-        markers = mark(eta_hw, 0.1)
+        markers = bank_weiser.mark(eta_hw, 0.1)
 
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
+
 
 def primal_solve(V):
     u = TrialFunction(V)
@@ -78,6 +83,7 @@ def primal_solve(V):
 
     return u_h
 
+
 def J(v):
     eps_f = 0.35
     centre = 0.2
@@ -91,6 +97,7 @@ def J(v):
     J = inner(c, v)*dx
 
     return J
+
 
 def dual_solve(u_h):
     V = u_h.function_space()
@@ -114,13 +121,14 @@ def dual_solve(u_h):
 
     return z_h
 
+
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
     V_f = FunctionSpace(mesh, "DG", k + 1)
     V_g = FunctionSpace(mesh, "DG", k)
 
-    N = bank_weiser.local_interpolation_to_V0(V_f, V_g)
+    N = bank_weiser.create_interpolation(V_f, V_g)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
@@ -135,7 +143,7 @@ def estimate(u_h):
     n = FacetNormal(mesh)
     a_e = inner(grad(e), grad(v))*dx
     L_e = inner(f + div(grad(u_h)), v)*dx + \
-          inner(jump(grad(u_h), -n), avg(v))*dS
+        inner(jump(grad(u_h), -n), avg(v))*dS
 
     e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
     error = norm(e_h, "H10")
@@ -150,38 +158,10 @@ def estimate(u_h):
 
     return eta_h
 
-def weighted_estimator(eta_uh, eta_zh):
-    eta_uh_vec = eta_uh.vector()
-    eta_zh_vec = eta_zh.vector()
-
-    sum_eta_uh = eta_uh_vec.sum()
-    sum_eta_zh = eta_zh_vec.sum()
-
-    eta_wh = Function(eta_uh.function_space(), name="eta")
-    eta_wh.vector()[:] = ((sum_eta_zh/(sum_eta_uh + sum_eta_zh))*eta_uh_vec) + \
-                         ((sum_eta_uh/(sum_eta_uh + sum_eta_zh))*eta_zh_vec)
-
-    return eta_wh
-
-def mark(eta_h, alpha):
-    etas = eta_h.vector().get_local()
-    indices = etas.argsort()[::-1]
-    sorted = etas[indices]
-
-    total = sum(sorted)
-    fraction = alpha*total
-
-    mesh = eta_h.function_space().mesh()
-    markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
-
-    v = 0.0
-    for i in indices:
-        if v >= fraction:
-            break
-        markers[int(i)] = True
-        v += sorted[i]
-
-    return markers
 
 if __name__ == "__main__":
+    main()
+
+
+def test():
     main()

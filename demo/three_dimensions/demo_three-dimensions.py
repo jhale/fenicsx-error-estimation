@@ -7,13 +7,15 @@ import bank_weiser
 
 k = 1
 
+
 def main():
     mesh = Mesh()
     try:
         with XDMFFile(MPI.comm_world, 'mesh.xdmf') as f:
             f.read(mesh)
     except:
-        print("Generate the mesh using `python3 generate_mesh.py` before running this script.")
+        print(
+            "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
     for i in range(0, 7):
@@ -28,6 +30,7 @@ def main():
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
+
 
 def solve(mesh):
     V = FunctionSpace(mesh, "CG", k)
@@ -59,6 +62,7 @@ def solve(mesh):
 
     return u_h
 
+
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
@@ -80,7 +84,7 @@ def estimate(u_h):
     n = FacetNormal(mesh)
     a_e = inner(grad(e), grad(v))*dx
     L_e = inner(f + div(grad(u_h)), v)*dx + \
-          inner(jump(grad(u_h), -n), avg(v))*dS
+        inner(jump(grad(u_h), -n), avg(v))*dS
 
     e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
     error = norm(e_h, "H10")
@@ -94,6 +98,7 @@ def estimate(u_h):
     eta_h.vector()[:] = eta
 
     return eta_h
+
 
 def mark(eta_h, alpha):
     etas = eta_h.vector().get_local()
@@ -115,5 +120,10 @@ def mark(eta_h, alpha):
 
     return markers
 
+
 if __name__ == "__main__":
     main()
+
+
+def test():
+    pass

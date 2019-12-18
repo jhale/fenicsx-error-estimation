@@ -5,7 +5,7 @@ import pytest
 
 from dolfin import *
 
-from bank_weiser import local_interpolation_to_V0
+from bank_weiser import create_interpolation
 
 @pytest.mark.parametrize('k,mesh', itertools.product([1, 2, 3, 4], [UnitIntervalMesh(5),
                                                       UnitSquareMesh(4, 4),
@@ -15,4 +15,4 @@ def test_interpolation_operator(k, mesh):
     V_g = FunctionSpace(mesh, "DG", k)
 
     # Various assertions build into function
-    N = local_interpolation_to_V0(V_f, V_g) 
+    N = create_interpolation(V_f, V_g) 

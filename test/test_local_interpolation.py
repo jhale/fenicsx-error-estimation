@@ -7,7 +7,7 @@ import pytest
 from dolfin import *
 from dolfin.fem.assembling import _create_dolfin_form
 
-from bank_weiser import local_interpolation_to_V0, estimate
+from bank_weiser import create_interpolation, estimate
 
 results_dirichlet = []
 results_neumann = []
@@ -85,8 +85,8 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
     L_e = inner(f + div(grad(u_h)), v)*dx + \
         inner(jump(grad(u_h), -n), avg(v))*dS
 
-    N = local_interpolation_to_V0(V_f, V_g)
-    N_original = local_interpolation_to_V0(V_f, V_g_original)
+    N = create_interpolation(V_f, V_g)
+    N_original = create_interpolation(V_f, V_g_original)
 
     e_V_f = estimate(a_e, L_e, N, bcs)
     e_V_f_original = estimate(a_e, L_e, N_original, bcs)
@@ -261,8 +261,8 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     L_e = inner(f + div(grad(u_h)), v)*dx + inner(jump(grad(u_h), -n),
                                                   avg(v))*dS - inner(inner(grad(u_h), n), v)*ds
 
-    N = local_interpolation_to_V0(V_f, V_g)
-    N_original = local_interpolation_to_V0(V_f, V_g_original)
+    N = create_interpolation(V_f, V_g)
+    N_original = create_interpolation(V_f, V_g_original)
 
     e_V_f = estimate(a_e, L_e, N, [])
     e_V_f_original = estimate(a_e, L_e, N_original, [])

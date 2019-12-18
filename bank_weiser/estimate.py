@@ -65,3 +65,16 @@ def estimate_python(a_e, L_e, N, bcs=[]):
         e_V_f.vector()[cell_dofs] = e
 
     return e_V_f
+
+def weighted_estimate(eta_uh, eta_zh):
+    eta_uh_vec = eta_uh.vector()
+    eta_zh_vec = eta_zh.vector()
+
+    sum_eta_uh = eta_uh_vec.sum()
+    sum_eta_zh = eta_zh_vec.sum()
+
+    eta_wh = Function(eta_uh.function_space(), name="eta")
+    eta_wh.vector()[:] = ((sum_eta_zh/(sum_eta_uh + sum_eta_zh))*eta_uh_vec) + \
+                         ((sum_eta_uh/(sum_eta_uh + sum_eta_zh))*eta_zh_vec)
+
+    return eta_wh

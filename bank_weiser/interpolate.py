@@ -1,7 +1,7 @@
 import numpy as np
 from dolfin import *
 
-def local_interpolation_to_V0(V_f_global, V_g_global):
+def create_interpolation(V_f_global, V_g_global):
     gdim = V_f_global.mesh().geometry().dim()
 
     if gdim == 1:
