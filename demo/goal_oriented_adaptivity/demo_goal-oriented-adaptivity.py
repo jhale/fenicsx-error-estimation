@@ -94,7 +94,7 @@ def primal_solve(V):
     A, b = assemble_system(a, L, bcs=bcs)
 
     u_h = Function(V, name="u_h")
-    solver = PETScLUSolver()
+    solver = PETScLUSolver("mumps")
     solver.solve(A, u_h.vector(), b)
 
     return u_h
@@ -132,7 +132,7 @@ def dual_solve(u_h):
     A, b = assemble_system(a, J_v, bcs=bc)
 
     z_h = Function(V, name="z_h")
-    solver = PETScLUSolver()
+    solver = PETScLUSolver("mumps")
     solver.solve(A, z_h.vector(), b)
 
     return z_h

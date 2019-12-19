@@ -18,11 +18,17 @@ dark_map = [cm.get_cmap('Dark2')(i/8.) for i in range(8)]
 df = pd.read_pickle("output/results.pkl")
 print(df)
 
+height = 3.50394/1.608
+width = 3.50394
+plt.rcParams.update({'font.size': 8})
+plt.rcParams.update({'lines.markersize': 5})
+plt.rcParams.update({'figure.figsize': [width, height]})
+plt.rcParams.update({'figure.autolayout': True})
 fig = plt.figure()
 plt.loglog(df["num_dofs"], df["estimated_error"], '^-',
-           label=r"$\eta_{\mathrm{BW}}$", color=dark_map[2])
+           label=r"$\eta_{w}$", color=dark_map[2])
 plt.loglog(df["num_dofs"], df["error"], '^-',
-           label=r"$|J(u) - J(u_h)|$", color=dark_map[0])
+           label=r"$\eta_{\mathrm{e}}$", color=dark_map[0])
 plt.xlabel("Number of dofs")
 plt.ylabel("$\eta$")
 marker_x, marker_y = marker([0.5, 0.35], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["estimated_error"].median(), df["estimated_error"].tail(1).item()])
