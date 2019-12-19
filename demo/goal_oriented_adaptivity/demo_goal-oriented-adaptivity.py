@@ -29,7 +29,7 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 15):
+    for i in range(0, 7):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = primal_solve(V)
@@ -37,6 +37,11 @@ def main():
             f.write(u_h)
 
         J_h = assemble(J(u_h))
+
+        #V_f = FunctionSpace(mesh, "CG", 4)
+        #u_exact_V_f = interpolate(u_exact, V_f)
+        #J_exact_V_f = assemble(J(u_exact_V_f))
+        #print(J_exact_V_f)
 
         z_h = dual_solve(u_h)
         with XDMFFile("output/z_h_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -54,13 +59,15 @@ def main():
         with XDMFFile("output/eta_hw_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_hw)
 
-        markers = bank_weiser.mark(eta_hw, 0.1)
+        markers = bank_weiser.mark(eta_hw, 0.4)
         error_hu = np.sqrt(eta_hu.vector().sum())
         error_hz = np.sqrt(eta_hz.vector().sum())
 
         result["J_h"] = J_h
         result["error"] = np.abs(J_h - J_fine)
-        result["estimated_error"] = error_hu*error_hz
+        result["error_hu"] = error_hu
+        result["error_hz"] = error_hz
+        result["error_hw"] = error_hu*error_hz
         result["hmin"] = mesh.hmin()
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
@@ -102,14 +109,15 @@ def primal_solve(V):
 
 def J(v):
     eps_f = 0.35
-    centre = 0.2
+    centre_x = 0.2
+    centre_y = 0.2
     cpp_f = """
-    ((x[0] - centre)/eps_f)*((x[0] - centre)/eps_f) + ((x[1] - centre)/eps_f)*((x[1] - centre)/eps_f) < 1.0 ? 
+    ((x[0] - centre_x)/eps_f)*((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f) < 1.0 ? 
     (1.0)*pow(eps_f, -2.0)*
-    exp(-1.0/(1.0 - (((x[0] - centre)/eps_f)*((x[0] - centre)/eps_f) + ((x[1] - centre)/eps_f)*((x[1] - centre)/eps_f)))) :
+    exp(-1.0/(1.0 - (((x[0] - centre_x)/eps_f)*((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f)))) :
     0.0"""
 
-    c = Expression(cpp_f, eps_f=eps_f, centre=centre, degree=3)
+    c = Expression(cpp_f, eps_f=eps_f, centre_x=centre_x, centre_y=centre_y, degree=3)
     J = inner(c, v)*dx
 
     return J

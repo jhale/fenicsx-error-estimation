@@ -25,13 +25,19 @@ plt.rcParams.update({'lines.markersize': 5})
 plt.rcParams.update({'figure.figsize': [width, height]})
 plt.rcParams.update({'figure.autolayout': True})
 fig = plt.figure()
-plt.loglog(df["num_dofs"], df["estimated_error"], '^-',
+plt.loglog(df["num_dofs"], df["error_hu"], '^-',
+           label=r"$\eta_{u}$", color=dark_map[3])
+plt.loglog(df["num_dofs"], df["error_hz"], '^-',
+           label=r"$\eta_{z}$", color=dark_map[4])
+plt.loglog(df["num_dofs"], df["error_hw"], '^-',
            label=r"$\eta_{w}$", color=dark_map[2])
-plt.loglog(df["num_dofs"], df["error"], '^-',
-           label=r"$\eta_{\mathrm{e}}$", color=dark_map[0])
+plt.loglog(df["num_dofs"], df["error"], '^--',
+           label=r"$\eta_{e}$", color=dark_map[0])
 plt.xlabel("Number of dofs")
 plt.ylabel("$\eta$")
-marker_x, marker_y = marker([0.5, 0.35], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["estimated_error"].median(), df["estimated_error"].tail(1).item()])
+marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["error_hw"].median(), df["error_hw"].tail(1).item()])
 annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
-plt.legend()
+marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["error_hz"].median(), df["error_hz"].tail(1).item()])
+annotation.slope_marker((marker_x, marker_y), (-0.5, 1), invert=True)
+plt.legend(loc=(1.04,0.25))
 plt.savefig("output/error.pdf")
