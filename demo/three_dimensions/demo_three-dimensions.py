@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 
 from dolfin import *
@@ -18,12 +19,17 @@ def main():
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
+    results = []
     for i in range(0, 7):
-        u_h = solve(mesh)
+        result = {}
+        V = FunctionSpace(mesh, "CG", k)
+        u_h = solve(V)
 
         eta_h = estimate(u_h)
-        error_bw = np.sqrt(eta_h.vector().sum())
-        print(error_bw)
+        result["error_bw"] = np.sqrt(eta_h.vector().sum())
+        result["hmin"] = mesh.hmin()
+        result["hmax"] = mesh.hmax()
+        result["num_dofs"] = V.dim()
 
         markers = mark(eta_h, 0.1)
         mesh = refine(mesh, markers)
@@ -31,10 +37,13 @@ def main():
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
 
+        results.append(result)
 
-def solve(mesh):
-    V = FunctionSpace(mesh, "CG", k)
+    df = pd.DataFrame(results)
+    df.to_pickle("output/results.pkl")
+    print(df)
 
+def solve(V):
     u = TrialFunction(V)
     v = TestFunction(V)
 
@@ -69,7 +78,7 @@ def estimate(u_h):
     V_f = FunctionSpace(mesh, "DG", k + 1)
     V_g = FunctionSpace(mesh, "DG", k)
 
-    N = bank_weiser.local_interpolation_to_V0(V_f, V_g)
+    N = bank_weiser.create_interpolation(V_f, V_g)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
