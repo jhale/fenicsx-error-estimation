@@ -5,11 +5,11 @@ def create_interpolation(V_f_global, V_g_global):
     gdim = V_f_global.mesh().geometry().dim()
 
     if gdim == 1:
-        mesh = UnitIntervalMesh(1)
+        mesh = UnitIntervalMesh(MPI.comm_self, 1)
     elif gdim == 2:
         mesh = UnitTriangleMesh.create()
     elif gdim == 3:
-        mesh = Mesh()
+        mesh = Mesh(MPI.comm_self)
         editor = MeshEditor()
         editor.open(mesh, "tetrahedron", 3, 3)
 

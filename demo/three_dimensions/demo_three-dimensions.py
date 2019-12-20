@@ -39,9 +39,10 @@ def main():
 
         results.append(result)
 
-    df = pd.DataFrame(results)
-    df.to_pickle("output/results.pkl")
-    print(df)
+    if (MPI.comm_world.rank == 0):
+        df = pd.DataFrame(results)
+        df.to_pickle("output/results.pkl")
+        print(df)
 
 def solve(V):
     u = TrialFunction(V)
