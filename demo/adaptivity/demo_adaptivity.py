@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 
 from dolfin import *
 import ufl
@@ -11,9 +12,8 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
     u_exact_code = f.read()
 
-k = 1
+k = 2
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), degree=4)
-
 
 def main():
     mesh = Mesh()
@@ -25,23 +25,44 @@ def main():
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
 
-    for i in range(0, 7):
-        u_h = solve(mesh)
-        error = errornorm(u_exact, u_h, "H10")
+    results = []
+    for i in range(0, 15):
+        result = {}
+
+        V = FunctionSpace(mesh, "CG", k)
+        u_h = solve(V)
+        with XDMFFile("output/u_h_{}.xdmf".format(str(i).zfill(4))) as f:
+            f.write(u_h)
+        result["error"] = errornorm(u_exact, u_h, "H10")
+
+        u_exact_V = interpolate(u_exact, u_h.function_space())
+        u_exact_V.rename("u_exact_V", "u_exact_V")
+        with XDMFFile("output/u_exact_{}.xdmf".format(str(i).zfill(4))) as f:
+            f.write(u_exact_V)
 
         eta_h = estimate(u_h)
-        error_bw = np.sqrt(eta_h.vector().sum())
+        with XDMFFile("output/eta_hu_{}.xdmf".format(str(i).zfill(4))) as f:
+            f.write(eta_h)
+        result["error_bw"] = np.sqrt(eta_h.vector().sum())
 
-        markers = bank_weiser.mark(eta_h, 0.1)
+        result["hmin"] = mesh.hmin()
+        result["hmax"] = mesh.hmax()
+        result["num_dofs"] = V.dim()
+
+        markers = bank_weiser.maximum(eta_h, 0.1)
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
 
+        results.append(result)
 
-def solve(mesh):
-    V = FunctionSpace(mesh, "CG", k)
+    if (MPI.comm_world.rank == 0):
+        df = pd.DataFrame(results)
+        df.to_pickle("output/results.pkl")
+        print(df)
 
+def solve(V):
     u = TrialFunction(V)
     v = TestFunction(V)
 
@@ -57,8 +78,8 @@ def solve(mesh):
 
     A, b = assemble_system(a, L, bcs=bcs)
 
-    u_h = Function(V)
-    solver = PETScLUSolver()
+    u_h = Function(V, name="u_h")
+    solver = PETScLUSolver("mumps")
     solver.solve(A, u_h.vector(), b)
 
     return u_h
@@ -94,7 +115,7 @@ def estimate(u_h):
     V_e = FunctionSpace(mesh, "DG", 0)
     v = TestFunction(V_e)
 
-    eta_h = Function(V_e)
+    eta_h = Function(V_e, name="eta_h")
     eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
     eta_h.vector()[:] = eta
 
