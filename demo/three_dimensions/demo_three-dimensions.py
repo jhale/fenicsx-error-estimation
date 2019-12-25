@@ -7,7 +7,7 @@ import ufl
 import bank_weiser
 
 k = 1
-
+parameters["ghost_mode"] = "shared_facet"
 
 def main():
     mesh = Mesh()
@@ -20,7 +20,7 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 7):
+    for i in range(0, 13):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = solve(V)
@@ -31,7 +31,7 @@ def main():
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
 
-        markers = mark(eta_h, 0.1)
+        markers = bank_weiser.maximum(eta_h, 0.1)
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -65,6 +65,13 @@ def solve(V):
     PETScOptions.set("ksp_type", "cg")
     PETScOptions.set("ksp_monitor_true_residual")
     PETScOptions.set("pc_type", "hypre")
+    PETScOptions.set("pc_hypre_type", "boomeramg")
+    PETScOptions.set("pc_hypre_boomeramg_strong_threshold", 0.5)
+    PETScOptions.set("pc_hypre_boomeramg_coarsen_type", "HMIS")
+    PETScOptions.set("pc_hypre_boomeramg_agg_nl", 4)
+    PETScOptions.set("pc_hypre_boomeramg_agg_num_paths", 2)
+    PETScOptions.set("pc_hypre_boomeramg_interp_type", "ext+i")
+    PETScOptions.set("pc_hypre_boomeramg_truncfactor", 0.35)
     PETScOptions.set("ksp_view")
     solver = PETScKrylovSolver()
     solver.set_from_options()
@@ -108,28 +115,6 @@ def estimate(u_h):
     eta_h.vector()[:] = eta
 
     return eta_h
-
-
-def mark(eta_h, alpha):
-    etas = eta_h.vector().get_local()
-    indices = etas.argsort()[::-1]
-    sorted = etas[indices]
-
-    total = sum(sorted)
-    fraction = alpha*total
-
-    mesh = eta_h.function_space().mesh()
-    markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
-
-    v = 0.0
-    for i in indices:
-        if v >= fraction:
-            break
-        markers[int(i)] = True
-        v += sorted[i]
-
-    return markers
-
 
 if __name__ == "__main__":
     main()
