@@ -22,4 +22,6 @@ pybind11_add_module(cpp SHARED
     bank_weiser.cpp
 )
 
+set(CMAKE_CXX_FLAGS "-march=native -O3")
+
 target_link_libraries(cpp PRIVATE pybind11::module ${DOLFIN_LIBRARIES}) 

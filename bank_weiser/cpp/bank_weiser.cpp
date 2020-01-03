@@ -41,7 +41,7 @@ void estimate(dolfin::Function& e,
 
     // Local element tensors, solver.
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                Eigen::RowMajor> A_e, A_e_0, b_e, b_e_0, x_e, x_e_0;
+                Eigen::RowMajor> A_e, A_e_0, b_e, b_e_0, x_e, x_e_0, NT;
     Eigen::LLT<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                              Eigen::RowMajor>> cholesky;
 
@@ -76,6 +76,8 @@ void estimate(dolfin::Function& e,
 
     A_e.resize(dofs_a0.size(), dofs_a1.size());
     b_e.resize(dofs_L.size(), 1);
+
+    NT = N.transpose().eval();
 
     for (CellIterator cell(*mesh); !cell.end(); ++cell)
     {
@@ -121,15 +123,15 @@ void estimate(dolfin::Function& e,
         }
 
         // Apply projection to V_0.
-        A_e_0 = N.transpose()*A_e*N;
-        b_e_0 = N.transpose()*b_e;
+        A_e_0.noalias() = NT*A_e*N;
+        b_e_0.noalias() = NT*b_e;
 
         // Solve
         cholesky.compute(A_e_0);
         x_e_0 = cholesky.solve(b_e_0);
 
         // Apply projection back to V_f.
-        x_e = N*x_e_0;
+        x_e.noalias() = N*x_e_0;
 
         // Insert into vector of Function.
         e_vector->add_local(x_e.data(), dofs); 

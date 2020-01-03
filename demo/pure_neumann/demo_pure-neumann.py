@@ -3,7 +3,6 @@ import numpy as np
 from dolfin import *
 import bank_weiser
 
-parameters["ghost_mode"] = "shared_facet"
 mesh = UnitSquareMesh(128, 128)
 
 k = 1

@@ -30,5 +30,5 @@ plt.loglog(df["num_dofs"], df["error_bw"], '^-',
 plt.xlabel("Number of dofs")
 plt.ylabel("$\eta$")
 marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["error_bw"].median(), df["error_bw"].tail(1).item()])
-annotation.slope_marker((marker_x, marker_y), (-0.5, 1), invert=True)
+annotation.slope_marker((marker_x, marker_y), (-0.3, 1), invert=True)
 plt.savefig("output/error.pdf")

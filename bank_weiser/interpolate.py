@@ -1,8 +1,8 @@
 import numpy as np
 from dolfin import *
 
-def create_interpolation(V_f_global, V_g_global):
-    gdim = V_f_global.mesh().geometry().dim()
+def create_interpolation(element_f, element_g):
+    gdim = element_f.cell().geometric_dimension()
 
     if gdim == 1:
         mesh = UnitIntervalMesh(MPI.comm_self, 1)
@@ -29,8 +29,8 @@ def create_interpolation(V_f_global, V_g_global):
     assert(mesh.ordered())
     assert(mesh.num_cells() == 1)
 
-    V_f = FunctionSpace(mesh, V_f_global.ufl_element())
-    V_g = FunctionSpace(mesh, V_g_global.ufl_element())
+    V_f = FunctionSpace(mesh, element_f)
+    V_g = FunctionSpace(mesh, element_g)
 
     V_f_dim = V_f.dim()
     V_g_dim = V_g.dim()

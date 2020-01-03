@@ -8,6 +8,8 @@ import bank_weiser
 
 k = 1
 parameters["ghost_mode"] = "shared_facet"
+parameters["form_compiler"]["optimize"] = True
+parameters["form_compiler"]["cpp_optimize"] = True
 
 def main():
     mesh = Mesh()
@@ -20,7 +22,7 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 13):
+    for i in range(0, 12):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = solve(V)
@@ -83,10 +85,11 @@ def solve(V):
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
+    element_f = FiniteElement("DG", tetrahedron, k + 1)
+    element_g = FiniteElement("DG", tetrahedron, k)
+    V_f = FunctionSpace(mesh, element_f)
 
-    N = bank_weiser.create_interpolation(V_f, V_g)
+    N = bank_weiser.create_interpolation(element_f, element_g)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
