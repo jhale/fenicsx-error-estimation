@@ -13,23 +13,27 @@ parameters["form_compiler"]["cpp_optimize"] = True
 parameters['form_compiler']['representation'] = 'uflacs'
 
 def main():
-    ns = 10
+    ns = 8 
     mesh = UnitCubeMesh(ns, ns, ns)
 
     results = []
-    for i in range(0, 8):
+    for i in range(0, 4):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = solve(V)
-
-        eta_h = estimate(u_h)
-        result["error_bw"] = np.sqrt(eta_h.vector().sum())
         result["hmin"] = mesh.hmin()
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
+        g = Expression("sin(pi*x[0])*sin(pi*x[1])*sin(pi*x[2])",
+                       degree=6)
+        result["error"] = errornorm(g, u_h, norm_type='h10', degree_rise=3)
 
-        markers = bank_weiser.maximum(eta_h, 0.2)
-        mesh = refine(mesh, markers, redistribute=True)
+        eta_h_bw = estimate(u_h)
+        eta_h_res = residual_estimate(u_h)
+        result["error_bw"] = np.sqrt(eta_h_bw.vector().sum())
+        result["error_res"] = np.sqrt(eta_h_res.vector().sum())
+
+        mesh = refine(mesh)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
@@ -49,9 +53,9 @@ def solve(V):
     v = TestFunction(V)
 
     g = Expression('sin(pi*x[0])*sin(pi*x[1])*sin(pi*x[2])',
-                   element=V.ufl_element())
+                   degree=3)
     f = Expression('3*pi*pi*sin(pi*x[0])*sin(pi*x[1])*sin(pi*x[2])',
-                   element=V.ufl_element())
+                   degree=3)
 
     a = inner(grad(u), grad(v))*dx
     L = inner(f, v)*dx
@@ -103,10 +107,10 @@ def estimate(u_h):
     n = FacetNormal(mesh)
     a_e = inner(grad(e), grad(v))*dx
     L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+          inner(jump(grad(u_h), -n), avg(v))*dS
 
     e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
-    #error = norm(e_h, "H10")
+    error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)
@@ -118,9 +122,27 @@ def estimate(u_h):
 
     return eta_h
 
+def residual_estimate(u_h):
+    mesh = u_h.function_space().mesh()
+
+    f = Expression('3*pi*pi*sin(pi*x[0])*sin(pi*x[1])*sin(pi*x[2])', degree=3)
+    
+    n = FacetNormal(mesh)
+    r = f + div(grad(u_h))
+    J_h = jump(grad(u_h), -n)
+
+    V = FunctionSpace(mesh, "DG", 0)
+    v = TestFunction(V)
+    h = CellDiameter(mesh)
+
+    eta_h = Function(V)
+    eta = assemble(h**2*r**2*v*dx + avg(h)*J_h**2*avg(v)*dS)
+    eta_h.vector()[:] = eta
+
+    return eta_h
+
 if __name__ == "__main__":
     main()
-
 
 def test():
     pass

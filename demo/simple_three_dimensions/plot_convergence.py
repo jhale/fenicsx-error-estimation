@@ -26,9 +26,14 @@ plt.rcParams.update({'figure.figsize': [width, height]})
 plt.rcParams.update({'figure.autolayout': True})
 fig = plt.figure()
 plt.loglog(df["num_dofs"], df["error_bw"], '^-',
-           label=r"$\eta_{\mathrm{BW}}$", color=dark_map[1])
+           label=r"$\eta_{\mathrm{bw}}$", color=dark_map[1])
+plt.loglog(df["num_dofs"], df["error_res"], '^-',
+           label=r"$\eta_{\mathrm{res}}$", color=dark_map[2])
+plt.loglog(df["num_dofs"], df["error"], '^-',
+           label=r"$\eta_{\mathrm{e}}$", color=dark_map[3])
 plt.xlabel("Number of dofs")
 plt.ylabel("$\eta$")
-marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["error_bw"].median(), df["error_bw"].tail(1).item()])
-annotation.slope_marker((marker_x, marker_y), (-0.3, 1), invert=True)
+marker_x, marker_y = marker([0.5, 0.3], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [df["error"].median(), df["error"].tail(1).item()])
+annotation.slope_marker((marker_x, marker_y), (-1, 3), invert=True)
+plt.legend()
 plt.savefig("output/error.pdf")
