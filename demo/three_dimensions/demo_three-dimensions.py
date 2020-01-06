@@ -22,23 +22,29 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 12):
+    for i in range(0, 20):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = solve(V)
 
+        print("Estimating...")
         eta_h = estimate(u_h)
         result["error_bw"] = np.sqrt(eta_h.vector().sum())
         result["hmin"] = mesh.hmin()
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
 
-        markers = bank_weiser.maximum(eta_h, 0.1)
-        mesh = refine(mesh, markers)
+        print("Marking...")
+        markers = bank_weiser.maximum(eta_h, 0.2)
+        print("Refining...")
+        mesh = refine(mesh, markers, redistribute=True)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(mesh)
 
+        with XDMFFile("output/u_{}.xdmf".format(str(i).zfill(4))) as f:
+            f.write(u_h)
+        
         results.append(result)
 
     if (MPI.comm_world.rank == 0):
@@ -55,16 +61,14 @@ def solve(V):
     a = inner(grad(u), grad(v))*dx
     L = inner(f, v)*dx
 
-    def all_boundary(x, on_boundary):
-        return on_boundary
-
-    bcs = DirichletBC(V, Constant(0.0), all_boundary)
+    bcs = DirichletBC(V, Constant(0.0), "on_boundary")
 
     A, b = assemble_system(a, L, bcs=bcs)
 
     u_h = Function(V)
 
     PETScOptions.set("ksp_type", "cg")
+    PETScOptions.set("ksp_rtol", 1E-10)
     PETScOptions.set("ksp_monitor_true_residual")
     PETScOptions.set("pc_type", "hypre")
     PETScOptions.set("pc_hypre_type", "boomeramg")
@@ -96,10 +100,7 @@ def estimate(u_h):
 
     f = Constant(1.0)
 
-    def all_boundary(x, on_boundary):
-        return on_boundary
-
-    bcs = DirichletBC(V_f, Constant(0.0), all_boundary, 'geometric')
+    bcs = DirichletBC(V_f, Constant(0.0), "on_boundary", "geometric")
 
     n = FacetNormal(mesh)
     a_e = inner(grad(e), grad(v))*dx
@@ -107,7 +108,7 @@ def estimate(u_h):
         inner(jump(grad(u_h), -n), avg(v))*dS
 
     e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
-    error = norm(e_h, "H10")
+    #error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)
