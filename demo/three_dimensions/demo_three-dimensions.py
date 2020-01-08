@@ -45,6 +45,9 @@ def main():
         with XDMFFile("output/u_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(u_h)
         
+        with XDMFFile("output/eta_{}.xdmf".format(str(i).zfill(4))) as f:
+            f.write(eta_h)
+        
         results.append(result)
 
     if (MPI.comm_world.rank == 0):
