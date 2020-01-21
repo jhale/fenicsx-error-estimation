@@ -1,23 +1,12 @@
-FROM quay.io/fenicsproject/dev-env:latest
+FROM quay.io/fenicsproject/dev:latest
 
 USER root
 WORKDIR /tmp
-ARG GMSH_VERSION=4.4.1
-
-RUN git clone https://bitbucket.org/jackhale/dolfin.git && \
-    cd dolfin && git checkout jackhale/wrap-meshdata-exists && cd ../ && \
-    git clone https://bitbucket.org/fenics-project/ufl.git && \
-    cd ufl && git checkout f77247ff383e123ece55c9e11434b6c122efc295 && cd ../ && \
-    git clone https://bitbucket.org/fenics-project/ffc.git && \
-    git clone https://bitbucket.org/fenics-project/dijitso.git && \
-    git clone https://bitbucket.org/fenics-project/fiat.git && \
-    git clone https://bitbucket.org/fenics-project/mshr.git && \
-    FENICS_PREFIX=/usr/local FENICS_SRC_DIR=/tmp /home/fenics/bin/fenics-build
+ARG GMSH_VERSION=4.5.1
 
 RUN apt-get update && \
-    pip3 install --upgrade pytest && \
-    pip3 install --upgrade pip && \
-    pip3 install pandas && \
+    pip3 install --no-cache-dir --upgrade pytest && \
+    pip3 install --no-cache-dir --upgrade pip && \
     apt-get install -y libxcursor-dev \
                        libxft2 \
                        libglu1 \
@@ -25,10 +14,8 @@ RUN apt-get update && \
                        libxinerama1 \
                        python3-lxml && \
     export HDF5_MPI="ON" && \
-    pip3 install --no-cache-dir --no-binary=h5py cffi decorator flake8 \
-                                                 h5py pygmsh pytest-xdist \
-                                                 sphinx sphinx_rtd_theme && \
-    pip3 install pygmsh && \
+    pip3 install --no-cache-dir --no-binary=h5py flake8 h5py meshio pandas \
+                                                 pygmsh sphinx sphinx_rtd_theme && \
     cd /usr/local && \
     wget -nc --quiet http://gmsh.info/bin/Linux/gmsh-${GMSH_VERSION}-Linux64.tgz && \
     tar -xf gmsh-${GMSH_VERSION}-Linux64.tgz
