@@ -8,15 +8,16 @@ Description
 FEniCS-EE is an open source library showing how various error estimation
 strategies can be implemented in the FEniCS Project finite element solver
 (https://fenicsproject.org). A particular focus is on implicit a posteriori
-error estimators, which usually involve solving local error problems in special
+error estimators, that usually involve solving local error problems in special
 finite element spaces on sub-patches of the mesh. Implicit error estimators
 usually give a significantly sharper estimate of the exact error than the more
 commonly used explicit error estimators, with very little extra computational
-expense (small matrix-vector multiplications and linear solves).
+expense (small matrix-matrix and matrix-vector multiplications, and linear
+solves).
 
 FEniCS-EE is described in the paper:
 
-** TODO: Add pre-print of paper **.
+TODO: Add pre-print of paper.
 
 **FEniCS-EE is compatible with the 2019.2.0 development version of the FEniCS Project**.
 
@@ -78,42 +79,43 @@ basic sanity checks on the results. Tests are run in the
 FAQ
 ===
 
-Q: Is this a replacement for the automated error estimation strategy already
-   implemented in DOLFIN?
+**Question:** Is this a replacement of, or a competitor with, the automated
+error estimation strategy already implemented in DOLFIN?
 
-A: No, the examples in this repository are aimed at users who wish to implement
-   specific a posteriori error estimation strategies into DOLFIN.
+**Answer:** No, the examples in this repository are aimed at users who wish to
+implement their own a posteriori error estimation strategies into DOLFIN and to
+have full control over the mathematical and discretisation process.
 
-Q: Can you tackle goal-oriented mesh adaptivity problems?
+**Question:** Can you tackle goal-oriented mesh adaptivity problems?
 
-A: Yes, see the demo `demo/goal_oriented_adaptivity/demo_goal-oriented-adaptivity.py`.
-   We use a weighted marking strategy, as opposed to a weighted residual strategy,
-   to control the error in the goal functional. This avoids solving the dual/adjoint
-   problem in a higher-order space, or, ad-hoc extrapolation procedures.
+**Answer:** Yes, see the demo
+`demo/goal_oriented_adaptivity/demo_goal-oriented-adaptivity.py`.  We use a
+weighted marking strategy, as opposed to a weighted residual strategy, to
+control the error in the goal functional. This avoids solving the dual/adjoint
+problem in a higher-order space, or, ad-hoc extrapolation procedures.
 
-Q: What will happen when FEniCSX
-   https://fenicsproject.org/fenics-project-roadmap-2019/ is released?
+**Question:** What will happen when FEniCSX
+https://fenicsproject.org/fenics-project-roadmap-2019/ is released?
 
-A: The core routine of this package, a projected local assembler, will be
-   reimplemented in Numba (http://numba.pydata.org/). The additional flexibility
-   over the current C++ assembler will allow us to extend the package to various
-   more complex problems, e.g. Stokes, incompressible elasticity,
-   and singularly-perturbed reaction-diffusion equations.
+**Answer:** The core routine in this package, a projected local assembler, will be
+reimplemented in Numba (http://numba.pydata.org/). The additional flexibility
+over the current C++ assembler will allow us to (straightforwardly) extend the
+package to error estimators for more complex problems, e.g. Stokes, incompressible
+elasticity, and singularly-perturbed reaction-diffusion equations.
 
 Citing
 ======
 
 Please consider citing the FEniCS-EE paper and code if you find it useful.
 
-::
+.. code::
     @misc{bulle_fenics-ee_2019,
         title = {{FEniCS} {Error} {Estimation} {(FEniCS-EE)}},
-        url = {https://figshare.com/articles/FEniCS-Shells/4291160},
-        author = {Hale, Jack S. and Brunetti, Matteo and Bordas, Stéphane P.A. and Maurini, Corrado},
-        month = dec,
-        year = {2016},
-        doi = {10.6084/m9.figshare.4291160},
-        keywords = {FEniCS, error estimation},
+        author = {Bulle, Raphaël, and Hale, Jack S.},
+        month = jan,
+        year = {2019},
+        doi = {10.6084/m9.figshare.10732421},
+        keywords = {FEniCS, finite element methods, error estimation},
     }
 
 along with the appropriate general `FEniCS citations <http://fenicsproject.org/citing>`_.
