@@ -1,3 +1,5 @@
+## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+## SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd

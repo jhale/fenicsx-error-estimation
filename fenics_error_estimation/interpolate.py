@@ -1,7 +1,16 @@
+## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+## SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 from dolfin import *
 
 def create_interpolation(element_f, element_g):
+    """Construct a projection operator.
+
+    Given local nodal finite element spaces V_f (element_f) and V_g (element_g)
+    construct an operator N that takes functions V_f to the special space V_f
+    with L v_T = 0, where L is the Lagrangian (nodal) interpolant between V_f
+    and V_g.
+    """
     gdim = element_f.cell().geometric_dimension()
 
     if gdim == 1:
