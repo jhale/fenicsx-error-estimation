@@ -34,8 +34,9 @@ estimation techniques for the Poisson problem:
 
 The following marking strategies:
 
-- Maximum strategy,
-- Dörfler strategy.
+- Maximum (bulk),
+- Dörfler (equilibration).
+- Quasi-optimal Dörfler.
 
 Upcoming features
 =================
