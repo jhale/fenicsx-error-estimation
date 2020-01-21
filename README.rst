@@ -74,7 +74,7 @@ Automated testing
 
 We use CircleCI to perform automated testing. All documented demos include
 basic sanity checks on the results. Tests are run in the
-``rbulle/fenics-error-estimation`` Docker image.
+``jhale/fenics-error-estimation`` Docker image.
 
 FAQ
 ===

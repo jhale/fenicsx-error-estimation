@@ -1,0 +1,18 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: jhale/fenics-error-estimation
+    working_directory: /home/fenics/working
+
+    steps:
+      - checkout
+
+      - run:
+          name: Run unit tests
+          command: python3 -m pytest test/
+
+      - run:
+          name: Run demos
+          command: python3 -m pytest demo/
+
