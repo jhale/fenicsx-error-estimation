@@ -84,7 +84,7 @@ error estimation strategy already implemented in DOLFIN?
 
 **Answer:** No, the examples in this repository are aimed at users who wish to
 implement their own a posteriori error estimation strategies into DOLFIN and to
-have full control over the mathematical and discretisation process.
+have full control over the mathematical and numerical formulation.
 
 **Question:** Can you tackle goal-oriented mesh adaptivity problems?
 
@@ -94,6 +94,11 @@ weighted marking strategy, as opposed to a weighted residual strategy, to
 control the error in the goal functional. This avoids solving the dual/adjoint
 problem in a higher-order space, or, ad-hoc extrapolation procedures.
 
+**Question:** Does it work for higher-order polynomial finite element spaces?
+
+**Answer**: Yes, the Bank-Weiser and Verfürth methods work for higher order
+polynomial finite element spaces.
+
 **Question:** What will happen when FEniCSX
 https://fenicsproject.org/fenics-project-roadmap-2019/ is released?
 
@@ -102,6 +107,11 @@ reimplemented in Numba (http://numba.pydata.org/). The additional flexibility
 over the current C++ assembler will allow us to (straightforwardly) extend the
 package to error estimators for more complex problems, e.g. Stokes, incompressible
 elasticity, and singularly-perturbed reaction-diffusion equations.
+
+**Question:** What about method x?
+
+**Answer:** We'd be happy to work with you to add your error estimation
+methodology to this repository.
 
 Citing
 ======
