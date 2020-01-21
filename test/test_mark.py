@@ -1,7 +1,7 @@
 import numpy as np
 
 import dolfin
-import bank_weiser
+import fenics_error_estimation
 
 def test_maximum():
     comm = dolfin.MPI.comm_world
@@ -16,7 +16,7 @@ def test_maximum():
     theta = 0.2
     eta_max = eta_h.vector().max()
 
-    markers = bank_weiser.maximum(eta_h, theta)
+    markers = fenics_error_estimation.maximum(eta_h, theta)
     print(eta_max*theta)
     print(eta_h.vector().get_local())
     print(markers.array())

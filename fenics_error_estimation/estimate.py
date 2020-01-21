@@ -2,7 +2,7 @@ import numpy as np
 
 from dolfin import *
 from dolfin.fem.assembling import _create_dolfin_form
-import bank_weiser.cpp as cpp
+import fenics_error_estimation.cpp as cpp
 
 def estimate(a_e, L_e, N, bcs=[]):
     try:
@@ -16,7 +16,7 @@ def estimate(a_e, L_e, N, bcs=[]):
     V_f = FunctionSpace(L_e_dolfin.function_space(0))
     e_V_f = Function(V_f)
 
-    cpp.estimate(e_V_f.cpp_object(), a_e_dolfin, L_e_dolfin, N, bcs)
+    cpp.projected_local_solver(e_V_f.cpp_object(), a_e_dolfin, L_e_dolfin, N, bcs)
 
     return e_V_f
 

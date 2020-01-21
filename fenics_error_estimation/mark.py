@@ -2,7 +2,7 @@ import numpy as np
 import mpi4py.MPI as MPI
 from dolfin import MeshFunction
 
-def mark(eta_h, theta):
+def dorfler(eta_h, theta):
     if (eta_h.function_space().mesh().mpi_comm().size > 1):
         raise SystemExit("Does not work with with MPI size > 1")
 

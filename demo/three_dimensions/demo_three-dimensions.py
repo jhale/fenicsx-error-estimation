@@ -4,7 +4,7 @@ import numpy as np
 from dolfin import *
 import ufl
 
-import bank_weiser
+import fenics_error_estimation
 
 k = 1
 parameters["ghost_mode"] = "shared_facet"
@@ -22,7 +22,7 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 20):
+    for i in range(0, 10):
         result = {}
         V = FunctionSpace(mesh, "CG", k)
         u_h = solve(V)
@@ -35,7 +35,7 @@ def main():
         result["num_dofs"] = V.dim()
 
         print("Marking...")
-        markers = bank_weiser.maximum(eta_h, 0.2)
+        markers = fenics_error_estimation.maximum(eta_h, 0.2)
         print("Refining...")
         mesh = refine(mesh, markers, redistribute=True)
 
@@ -44,10 +44,10 @@ def main():
 
         with XDMFFile("output/u_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(u_h)
-        
+
         with XDMFFile("output/eta_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_h)
-        
+
         results.append(result)
 
     if (MPI.comm_world.rank == 0):
@@ -96,7 +96,7 @@ def estimate(u_h):
     element_g = FiniteElement("DG", tetrahedron, k)
     V_f = FunctionSpace(mesh, element_f)
 
-    N = bank_weiser.create_interpolation(element_f, element_g)
+    N = fenics_error_estimation.create_interpolation(element_f, element_g)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
@@ -110,8 +110,8 @@ def estimate(u_h):
     L_e = inner(f + div(grad(u_h)), v)*dx + \
         inner(jump(grad(u_h), -n), avg(v))*dS
 
-    e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
-    #error = norm(e_h, "H10")
+    e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
+    error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)

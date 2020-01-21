@@ -7,7 +7,7 @@ import pytest
 from dolfin import *
 from dolfin.fem.assembling import _create_dolfin_form
 
-from bank_weiser import create_interpolation, estimate
+from fenics_error_estimation import create_interpolation, estimate
 
 results_dirichlet = []
 results_neumann = []
@@ -47,9 +47,9 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
         k_g = k - 1
 
     V = FunctionSpace(mesh, "CG", k)
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
-    V_g_original = FunctionSpace(mesh, "DG", k_g)
+    element_f = FiniteElement("DG", mesh.ufl_cell(), k + 1)
+    element_g = FiniteElement("DG", mesh.ufl_cell(), k)
+    V_f = FunctionSpace(mesh, element_f)
     V_e = FunctionSpace(mesh, "DG", 0)
 
     u_exact, f = u_and_f_dirichlet
@@ -85,31 +85,21 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
     L_e = inner(f + div(grad(u_h)), v)*dx + \
         inner(jump(grad(u_h), -n), avg(v))*dS
 
-    N = create_interpolation(V_f, V_g)
-    N_original = create_interpolation(V_f, V_g_original)
+    N = create_interpolation(element_f, element_g)
 
     e_V_f = estimate(a_e, L_e, N, bcs)
-    e_V_f_original = estimate(a_e, L_e, N_original, bcs)
 
     error_bw = np.sqrt(assemble(inner(grad(e_V_f), grad(e_V_f))*dx))
-    error_bw_original = np.sqrt(
-        assemble(inner(grad(e_V_f_original), grad(e_V_f_original))*dx))
-
     error_exact = errornorm(u_exact, u_h, "H10")
 
     V_e = FunctionSpace(mesh, "DG", 0)
     e_V_e = project(inner(grad(e_V_f), grad(e_V_f)), V_e)
-    e_V_e_original = project(
-        inner(grad(e_V_f_original), grad(e_V_f_original)), V_e)
 
     u_exact_V = interpolate(u_exact, V)
 
     if output_xdmf:
         with XDMFFile("output/pure_dirichlet/local_interpolation/e_V_e.xdmf") as f:
             f.write_checkpoint(e_V_e, "e_V_e")
-
-        with XDMFFile("output/pure_dirichlet/local_interpolation/e_V_e_original.xdmf") as f:
-            f.write_checkpoint(e_v_e_original, "e_V_e_original")
 
         with XDMFFile("output/pure_dirichlet/local_interpolation/u_h.xdmf") as f:
             f.write_checkpoint(u_h, "u_h")
@@ -128,7 +118,6 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
     result["gdim"] = d
     result["num_dofs"] = V.dim()
     result["error_bank_weiser"] = error_bw
-    #result["error_bank_weiser_original"] = error_bw_original
     result["error_exact"] = error_exact
     result["relative_error"] = error_bw/error_exact - 1.
 
@@ -169,9 +158,9 @@ def test_convergence_rates_pure_dirichlet():
             plt.loglog(data['hmax'], data['error_bank_weiser'],
                        dashes=[6, 2], label="Bank-Weiser error")
             plt.legend()
-            plt.title("$k = {}$, $d = {}$".format(k, gdim))
-            plt.xlabel("$h_{\mathrm{max}}$")
-            plt.ylabel("$H^1_0(\Omega)$ error")
+            plt.title(r"$k = {}$, $d = {}$".format(k, gdim))
+            plt.xlabel(r"$h_{\mathrm{max}}$")
+            plt.ylabel(r"$H^1_0(\Omega)$ error")
             marker_x, marker_y = loglog_marker_pos(
                 data['hmax'].values, data['error_exact'].values, data['error_bank_weiser'].values)
             annotation.slope_marker((marker_x, marker_y), (k, 1))
@@ -204,7 +193,7 @@ def test_against_lagrange_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
 
 @pytest.mark.parametrize('k', [1, 2])
 def test_against_python_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
-    from bank_weiser.estimate import estimate_python
+    from fenics_error_estimation.estimate import estimate_python
     result_python = test_local_pure_dirichlet(
         request, mesh, k, u_and_f_dirichlet, estimate=estimate_python)
     result_local = test_local_pure_dirichlet(
@@ -233,9 +222,9 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
         k_g = k-1
 
     V = FunctionSpace(mesh, "CG", k)
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
-    V_g_original = FunctionSpace(mesh, "DG", k_g)
+    element_f = FiniteElement("DG", mesh.ufl_cell(), k + 1)
+    element_g = FiniteElement("DG", mesh.ufl_cell(), k)
+    V_f = FunctionSpace(mesh, element_f)
     V_e = FunctionSpace(mesh, "DG", 0)
 
     u_exact, f = u_and_f_neumann
@@ -249,7 +238,6 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     u_h = Function(V)
     A, b = assemble_system(a, L)
 
-    #solver = PETScKrylovSolver("cg", "hypre_amg")
     solver = PETScLUSolver()
     solver.solve(A, u_h.vector(), b)
 
@@ -261,30 +249,21 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     L_e = inner(f + div(grad(u_h)), v)*dx + inner(jump(grad(u_h), -n),
                                                   avg(v))*dS - inner(inner(grad(u_h), n), v)*ds
 
-    N = create_interpolation(V_f, V_g)
-    N_original = create_interpolation(V_f, V_g_original)
+    N = create_interpolation(element_f, element_g)
 
     e_V_f = estimate(a_e, L_e, N, [])
-    e_V_f_original = estimate(a_e, L_e, N_original, [])
 
     error_bw = np.sqrt(
         assemble(inner(grad(e_V_f), grad(e_V_f))*dx + inner(e_V_f, e_V_f)*dx))
-    error_bw_original = np.sqrt(assemble(inner(grad(e_V_f_original), grad(
-        e_V_f_original))*dx + inner(e_V_f_original, e_V_f_original)*dx))
-
     error_exact = errornorm(u_exact, u_h, "H1")
 
     V_e = FunctionSpace(mesh, "DG", 0)
     e_V_e = project(inner(grad(e_V_f), grad(e_V_f)) + inner(e_V_f, e_V_f), V_e)
-    e_V_e_original = project(inner(grad(e_V_f_original), grad(
-        e_V_f_original)) + inner(e_V_f_original, e_V_f_original), V_e)
     u_exact_V = interpolate(u_exact, V)
 
     if output_xdmf:
         with XDMFFile("output/pure_neumann/local_interpolation/e_V_e.xdmf") as f:
             f.write_checkpoint(e_V_e, "e_V_e")
-        with XDMFFile("output/pure_neumann/local_interpolation/e_V_e_original.xdmf") as f:
-            f.write_checkpoint(e_V_e_original, "e_V_e_original")
 
         with XDMFFile("output/pure_neumann/local_interpolation/u_h.xdmf") as f:
             f.write_checkpoint(u_h, "u_h")
@@ -342,11 +321,10 @@ def test_convergence_rates_pure_neumann():
             plt.loglog(data['hmax'], data['error_exact'], label="True error")
             plt.loglog(data['hmax'], data['error_bank_weiser'],
                        dashes=[6, 2], label="Bank-Weiser error")
-            #plt.loglog(data['hmax'], data['error_bank_weiser_original'], '--', label="Bank-Weiser error (original def)")
             plt.legend()
-            plt.title("$k = {}$, $d = {}$".format(k, gdim))
-            plt.xlabel("$h_{\mathrm{max}}$")
-            plt.ylabel("$H^1(\Omega)$ error")
+            plt.title(r"$k = {}$, $d = {}$".format(k, gdim))
+            plt.xlabel(r"$h_{\mathrm{max}}$")
+            plt.ylabel(r"$H^1(\Omega)$ error")
             marker_x, marker_y = loglog_marker_pos(
                 data['hmax'].values, data['error_exact'].values, data['error_bank_weiser'].values)
             annotation.slope_marker((marker_x, marker_y), (k, 1))
@@ -376,7 +354,7 @@ def test_against_lagrange_pure_neumann(request, mesh, k, u_and_f_neumann):
 
 @pytest.mark.parametrize('k', [1, 2])
 def test_against_python_pure_neumann(request, mesh, k, u_and_f_neumann):
-    from bank_weiser.estimate import estimate_python
+    from fenics_error_estimation.estimate import estimate_python
     result_python = test_local_pure_neumann(
         request, mesh, k, u_and_f_neumann, estimate=estimate_python)
     result_local = test_local_pure_neumann(request, mesh, k, u_and_f_neumann)

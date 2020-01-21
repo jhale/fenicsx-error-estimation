@@ -6,7 +6,7 @@ import pandas as pd
 from dolfin import *
 import ufl
 
-import bank_weiser
+import fenics_error_estimation
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
@@ -55,11 +55,11 @@ def main():
         with XDMFFile("output/eta_hz_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_hz)
 
-        eta_hw = bank_weiser.weighted_estimate(eta_hu, eta_hz)
+        eta_hw = fenics_error_estimation.weighted_estimate(eta_hu, eta_hz)
         with XDMFFile("output/eta_hw_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_hw)
 
-        markers = bank_weiser.mark(eta_hw, 0.4)
+        markers = fenics_error_estimation.dorfler(eta_hw, 0.4)
         error_hu = np.sqrt(eta_hu.vector().sum())
         error_hz = np.sqrt(eta_hz.vector().sum())
 
@@ -149,10 +149,12 @@ def dual_solve(u_h):
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
+    element_f = FiniteElement("DG", triangle, k + 1)
+    element_g = FiniteElement("DG", triangle, k)
 
-    N = bank_weiser.create_interpolation(V_f, V_g)
+    N = fenics_error_estimation.create_interpolation(element_f, element_g)
+
+    V_f = FunctionSpace(mesh, element_f)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
@@ -169,7 +171,7 @@ def estimate(u_h):
     L_e = inner(f + div(grad(u_h)), v)*dx + \
         inner(jump(grad(u_h), -n), avg(v))*dS
 
-    e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
+    e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
     error = norm(e_h, "H10")
 
     # Computation of local error indicator

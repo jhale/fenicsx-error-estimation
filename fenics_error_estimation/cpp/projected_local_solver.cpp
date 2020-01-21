@@ -21,11 +21,11 @@ namespace py = pybind11;
 
 using namespace dolfin;
 
-void estimate(dolfin::Function& e,
-              const dolfin::Form& a,
-              const dolfin::Form& L,
-              const py::EigenDRef<const Eigen::MatrixXd> N,
-              const std::vector<std::shared_ptr<const DirichletBC>> bcs)
+void projected_local_solver(dolfin::Function& e,
+                            const dolfin::Form& a,
+                            const dolfin::Form& L,
+                            const py::EigenDRef<const Eigen::MatrixXd> N,
+                            const std::vector<std::shared_ptr<const DirichletBC>> bcs)
 {
     // TODO: More dolfin_assert.
     // Boiler plate setup.
@@ -34,7 +34,6 @@ void estimate(dolfin::Function& e,
     UFC L_ufc(L);
 
     // TODO: Check size of N wrt to compatibility with a and L.
-
     typedef std::vector<std::shared_ptr<const GenericFunction>> coefficient_t;
     const coefficient_t coefficients_a = a.coefficients();
     const coefficient_t coefficients_L = L.coefficients();
@@ -141,5 +140,5 @@ void estimate(dolfin::Function& e,
 
 PYBIND11_MODULE(cpp, m)
 {
-    m.def("estimate", &estimate, "Compute Bank-Weiser estimator");
+    m.def("projected_local_solver", &projected_local_solver, "Local solves on projected finite element space");
 }

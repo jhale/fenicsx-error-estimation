@@ -57,7 +57,10 @@ def _global_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
     M = np.eye(V_f.dim()) - I
     eigs, P = np.linalg.eig(M)
     mask = np.abs(eigs) > 0.5
-    N = P[:, mask]
+    try:
+        N = np.array(P[:, mask], dtype=np.float64)
+    except ComplexWarning:
+        pass
 
     A_e, b_e = assemble_system(a_e, L_e, bcs=bcs)
     A_e_0 = N.T@A_e.array()@N
@@ -126,7 +129,10 @@ def _global_pure_neumann(request, mesh, k, u_and_f_neumann):
     M = np.eye(V_f.dim()) - I
     eigs, P = np.linalg.eig(M)
     mask = np.abs(eigs) > 0.5
-    N = P[:, mask]
+    try:
+        N = np.array(P[:, mask], dtype=np.float64)
+    except ComplexWarning:
+        pass
 
     A_e, b_e = assemble_system(a_e, L_e)
     A_e_0 = N.T@A_e.array()@N

@@ -101,8 +101,8 @@ class CMakeBuild(build_ext):
 
 
 def run_install():
-   setup(name="bank_weiser",
-         description="",
+   setup(name="fenics_error_estimation",
+         description="Implicit and a posteriori error estimates in FEniCS",
          version=VERSION,
          author=AUTHORS,
          classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
@@ -110,9 +110,9 @@ def run_install():
          author_email="mail@jackhale.co.uk",
          maintainer_email="mail@jackhale.co.uk",
          url=URL,
-         packages=["bank_weiser"],
-         package_dir={"bank_weiser": "bank_weiser"},
-         ext_modules=[CMakeExtension("bank_weiser.cpp", sourcedir="./bank_weiser/cpp/")],
+         packages=["fenics_error_estimation"],
+         package_dir={"fenics_error_estimation": "fenics_error_estimation"},
+         ext_modules=[CMakeExtension("fenics_error_estimation.cpp", sourcedir="./fenics_error_estimation/cpp/")],
          cmdclass=dict(build_ext=CMakeBuild),
          platforms=["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
          install_requires=REQUIREMENTS,

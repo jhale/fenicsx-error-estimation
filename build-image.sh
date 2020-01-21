@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t rbulle/bank-weiser:latest docker/
+docker build -t rbulle/fenics-error-estimation:latest docker/

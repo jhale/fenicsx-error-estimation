@@ -5,14 +5,12 @@ import pytest
 
 from dolfin import *
 
-from bank_weiser import create_interpolation
+from fenics_error_estimation import create_interpolation
 
-@pytest.mark.parametrize('k,mesh', itertools.product([1, 2, 3, 4], [UnitIntervalMesh(5),
-                                                      UnitSquareMesh(4, 4),
-                                                      UnitCubeMesh.create(2, 2, 2, CellType.Type.tetrahedron)]))
-def test_interpolation_operator(k, mesh):
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
+@pytest.mark.parametrize('k,cell_type', itertools.product([1, 2, 3, 4], [interval, triangle, tetrahedron]))
+def test_interpolation_operator(k, cell_type):
+    V_f = FiniteElement("DG", cell_type, k + 1)
+    V_g = FiniteElement("DG", cell_type, k)
 
     # Various assertions build into function
     N = create_interpolation(V_f, V_g) 

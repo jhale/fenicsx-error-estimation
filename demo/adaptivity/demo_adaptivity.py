@@ -6,7 +6,7 @@ import pandas as pd
 from dolfin import *
 import ufl
 
-import bank_weiser
+import fenics_error_estimation
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
@@ -49,7 +49,7 @@ def main():
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
 
-        markers = bank_weiser.maximum(eta_h, 0.1)
+        markers = fenics_error_estimation.maximum(eta_h, 0.1)
         mesh = refine(mesh, markers)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -88,10 +88,12 @@ def solve(V):
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
-    V_f = FunctionSpace(mesh, "DG", k + 1)
-    V_g = FunctionSpace(mesh, "DG", k)
+    element_f = FiniteElement("DG", triangle, k + 1)
+    element_g = FiniteElement("DG", triangle, k)
 
-    N = bank_weiser.create_interpolation(V_f, V_g)
+    N = fenics_error_estimation.create_interpolation(element_f, element_g)
+
+    V_f = FunctionSpace(mesh, element_f)
 
     e = TrialFunction(V_f)
     v = TestFunction(V_f)
@@ -108,7 +110,7 @@ def estimate(u_h):
     L_e = inner(f + div(grad(u_h)), v)*dx + \
         inner(jump(grad(u_h), -n), avg(v))*dS
 
-    e_h = bank_weiser.estimate(a_e, L_e, N, bcs)
+    e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
     error = norm(e_h, "H10")
 
     # Computation of local error indicator
