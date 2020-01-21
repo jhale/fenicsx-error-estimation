@@ -109,14 +109,15 @@ Citing
 Please consider citing the FEniCS-EE paper and code if you find it useful.
 
 .. code::
-    @misc{bulle_fenics-ee_2019,
+
+  @misc{bulle_fenics-ee_2019,
         title = {{FEniCS} {Error} {Estimation} {(FEniCS-EE)}},
         author = {Bulle, Raphaël, and Hale, Jack S.},
         month = jan,
         year = {2019},
         doi = {10.6084/m9.figshare.10732421},
         keywords = {FEniCS, finite element methods, error estimation},
-    }
+  }
 
 along with the appropriate general `FEniCS citations <http://fenicsproject.org/citing>`_.
 
