@@ -9,10 +9,14 @@ jobs:
       - checkout
 
       - run:
+          name: Build and install FEniCS-EE
+          command: python3 setup.py develop --user
+
+      - run:
           name: Run unit tests
-          command: python3 -m pytest test/
+          command: python3 -m pytest -v test/
 
       - run:
           name: Run demos
-          command: python3 -m pytest demo/
+          command: python3 -m pytest -v demo/
 
