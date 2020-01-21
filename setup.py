@@ -25,8 +25,6 @@ else:
     REQUIREMENTS = [
         "numpy",
         "fenics-ffc>=2019.2.0.dev0",
-        "pandas",
-        "mpltools",
     ]
 
 AUTHORS = """\

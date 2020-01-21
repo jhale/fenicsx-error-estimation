@@ -14,7 +14,7 @@ RUN apt-get update && \
                        libxinerama1 \
                        python3-lxml && \
     export HDF5_MPI="ON" && \
-    pip3 install --no-cache-dir --no-binary=h5py flake8 h5py meshio pandas \
+    pip3 install --no-cache-dir --no-binary=h5py flake8 h5py meshio mpltools pandas\
                                                  pygmsh sphinx sphinx_rtd_theme && \
     cd /usr/local && \
     wget -nc --quiet http://gmsh.info/bin/Linux/gmsh-${GMSH_VERSION}-Linux64.tgz && \
