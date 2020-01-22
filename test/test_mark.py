@@ -3,6 +3,19 @@ import numpy as np
 import dolfin
 import fenics_error_estimation
 
+def test_dorfler_parallel():
+    comm = dolfin.MPI.comm_world
+
+    mesh = dolfin.UnitIntervalMesh(comm.size*5)
+    V = dolfin.FunctionSpace(mesh, "DG", 0)
+    markers = dolfin.MeshFunction("bool", mesh, mesh.geometry().dim(), False)
+
+    eta_h = dolfin.Function(V)
+    eta_h.vector()[:] = (comm.rank + 1)*np.arange(0, V.dim()/comm.size)
+
+    theta = 0.5
+    markers = fenics_error_estimation.dorfler_parallel(eta_h, theta)
+
 def test_maximum():
     comm = dolfin.MPI.comm_world
 
