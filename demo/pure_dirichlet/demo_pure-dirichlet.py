@@ -5,9 +5,13 @@ import numpy as np
 from dolfin import *
 import fenics_error_estimation
 
-mesh = UnitSquareMesh(120, 120)
+parameters["ghost_mode"] = "shared_facet"
 
-k = 1
+mesh = UnitSquareMesh(16, 16)
+mesh = refine(mesh, redistribute=True)
+mesh = refine(mesh, redistribute=True)
+
+k = 3
 V = FunctionSpace(mesh, "CG", k)
 
 u = TrialFunction(V)

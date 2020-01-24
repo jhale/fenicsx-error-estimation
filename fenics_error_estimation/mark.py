@@ -2,7 +2,7 @@
 ## SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 import mpi4py.MPI as MPI
-from dolfin import MeshFunction
+from dolfin import MeshFunction, cells
 
 import itertools
 
@@ -13,9 +13,8 @@ def dorfler(eta_h, theta):
 
     etas = eta_h.vector().get_local()
     indices = etas.argsort()[::-1]
-    sorted = etas[indices]
 
-    total = sum(sorted)
+    total = sum(etas)
     fraction = theta*total
 
     mesh = eta_h.function_space().mesh()
@@ -26,7 +25,7 @@ def dorfler(eta_h, theta):
         if v >= fraction:
             break
         markers[int(i)] = True
-        v += sorted[i]
+        v += etas[i]
 
     return markers
 
@@ -34,21 +33,24 @@ def dorfler_parallel(eta_h, theta):
     mesh = eta_h.function_space().mesh()
     comm = mesh.mpi_comm()
 
+    # NOTE: Check the necessity of this loop.
+    etas = MeshFunction("double", mesh, mesh.topology().dim(), 0.0)
+    for c in cells(mesh):
+        etas[c] = eta_h.vector()[c.index()]
+
     markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
-    markers_local = markers.array()
+    markers_local = np.copy(markers.array())
+    markers_local_shape = comm.gather(markers_local.shape, root=0)
 
     # Communicate indicators on each process back to the rank 0 process
     # NOTE: Obviously suboptimal and problematic for very large problems.
-    eta_local = eta_h.vector().get_local()
-    eta_global = np.empty(eta_h.function_space().dim(), dtype=np.float64)
-    comm.Gather(eta_local, eta_global, root=0)
-
-    # Communicate local ranges back to rank 0 process.
-    # These are used for sending the markers back at the end.
-    ranges = comm.gather(eta_h.vector().local_range(), root=0)
+    etas_local = etas.array()
+    eta_global = comm.gather(etas_local, root=0)
 
     if (comm.rank == 0):
-        markers_global = np.zeros(eta_h.function_space().dim(), dtype=np.bool)
+        eta_global = np.hstack(eta_global)
+        markers_global = np.zeros_like(eta_global, dtype=np.bool)
+        markers_local_shape = np.array(markers_local_shape).reshape(-1)
 
         # Indices biggest to smallest
         indices = np.argsort(eta_global)[::-1]
@@ -57,6 +59,7 @@ def dorfler_parallel(eta_h, theta):
 
         # Find set with minimal cardinality.
         # TODO: Non-sequential memory access and tight loop.
+        # TODO: Implement O(N) algorithm.
         rolling_sum = 0.0
         for i in indices:
             if rolling_sum >= fraction:
@@ -64,18 +67,20 @@ def dorfler_parallel(eta_h, theta):
             rolling_sum += eta_global[i]
             markers_global[i] = True
 
-        send_counts = [r[1] - r[0] for r in ranges]
-        displacements = list(itertools.accumulate([r[0] for r in ranges]))
+        send_counts = markers_local_shape
+        displacements = np.zeros(comm.size)
+        for i in range(1, len(displacements)):
+            displacements[i] = displacements[i - 1] + send_counts[i - 1]
     else:
         markers_global = None
-        send_counts = None
         displacements = None
+        send_counts = None
 
     # Scatter back
     comm.Scatterv([markers_global, send_counts, displacements, MPI.BOOL], markers_local, root=0)
     markers.set_values(markers_local)
 
-    eturn markers
+    return markers
 
 
 def maximum(eta_h, theta):

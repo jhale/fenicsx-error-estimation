@@ -16,7 +16,19 @@ def create_interpolation(element_f, element_g):
     if gdim == 1:
         mesh = UnitIntervalMesh(MPI.comm_self, 1)
     elif gdim == 2:
-        mesh = UnitTriangleMesh.create()
+        mesh = Mesh(MPI.comm_self)
+        editor = MeshEditor()
+        editor.open(mesh, "triangle", 2, 2)
+
+        editor.init_vertices(3)
+        editor.init_cells(1)
+
+        editor.add_vertex(0, np.array([0.0, 0.0]))
+        editor.add_vertex(1, np.array([1.0, 0.0]))
+        editor.add_vertex(2, np.array([0.0, 1.0]))
+        editor.add_cell(0, np.array([0, 1, 2], dtype=np.uintp))
+
+        editor.close()
     elif gdim == 3:
         mesh = Mesh(MPI.comm_self)
         editor = MeshEditor()
@@ -65,6 +77,8 @@ def create_interpolation(element_f, element_g):
 
     # Change of basis to reduce N as a diagonal with only ones and zeros
     eigs, P = np.linalg.eig(N)
+    eigs = np.real(eigs)
+    P = np.real(P)
     assert(np.count_nonzero(np.isclose(eigs, 1.0)) == V_f_dim - V_g_dim)
     assert(np.count_nonzero(np.isclose(eigs, 0.0)) == V_g_dim)
     mask = np.abs(eigs) > 0.5
