@@ -18,7 +18,7 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
     u_exact_code = f.read()
 
-k = 3
+k = 2
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), element=FiniteElement("CG", triangle, k + 3))
 
 def main():
@@ -66,7 +66,7 @@ def main():
         result["hmax"] = comm.reduce(mesh.hmax(), op=mpi4py.MPI.MAX, root=0)
         result["num_dofs"] = V.dim()
 
-        markers = fenics_error_estimation.dorfler_parallel(eta_h, 0.3)
+        markers = fenics_error_estimation.dorfler(eta_h, 0.5)
         mesh = refine(mesh, markers, redistribute=True)
 
         with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:

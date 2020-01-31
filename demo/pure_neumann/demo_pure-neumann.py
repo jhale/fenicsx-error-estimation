@@ -5,9 +5,11 @@ import numpy as np
 from dolfin import *
 import fenics_error_estimation
 
+parameters["ghost_mode"] = "shared_facet"
+
 mesh = UnitSquareMesh(128, 128)
 
-k = 1
+k = 2
 element = FiniteElement("CG", triangle, k)
 V = FunctionSpace(mesh, element)
 
@@ -15,7 +17,7 @@ u = TrialFunction(V)
 v = TestFunction(V)
 
 f = Expression(
-    "(2*pow(2*pi,2)+1)*sin(2*pi*x[0]-0.5*pi)*sin(2*pi*x[1]-0.5*pi)", degree=k + 3)
+    "(2*pow(2*pi,2)+1)*sin(2*pi*x[0]-0.5*pi)*sin(2*pi*x[1]-0.5*pi)", degree=k + 6)
 g = Constant(0.0)
 
 a = inner(grad(u), grad(v))*dx + inner(u, v)*dx
@@ -54,7 +56,7 @@ eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
 eta_h.vector()[:] = eta
 
 u_exact = Expression(
-    "sin(2*pi*x[0]-0.5*pi)*sin(2*pi*x[1]-0.5*pi)", degree=k + 3)
+    "sin(2*pi*x[0]-0.5*pi)*sin(2*pi*x[1]-0.5*pi)", degree=k + 5)
 
 error_bw = np.sqrt(eta_h.vector().sum())
 error_exact = errornorm(u_exact, u_h, "H10")

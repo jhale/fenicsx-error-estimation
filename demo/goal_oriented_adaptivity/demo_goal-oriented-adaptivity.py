@@ -14,6 +14,8 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
     u_exact_code = f.read()
 
+parameters["ghost_mode"] = "shared_facet"
+
 k = 1
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), degree=5)
 

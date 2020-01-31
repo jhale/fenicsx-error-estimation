@@ -87,4 +87,4 @@ print("Bank-Weiser error from estimator: {}".format(error_bw))
 
 
 def test():
-    assert(np.allclose(error_exact, error_bw, 1E-2))
+    assert(np.allclose(error_exact, error_bw, rtol=0.1))

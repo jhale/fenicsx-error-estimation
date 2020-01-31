@@ -7,36 +7,18 @@ from dolfin import MeshFunction, cells
 import itertools
 
 def dorfler(eta_h, theta):
-    """Dörfler marking strategy"""
-    if (eta_h.function_space().mesh().mpi_comm().size > 1):
-        raise SystemExit("Does not work with with MPI size > 1")
+    """Equilibriated marking strategy of Dörfler.
 
-    etas = eta_h.vector().get_local()
-    indices = etas.argsort()[::-1]
-
-    total = sum(etas)
-    fraction = theta*total
-
-    mesh = eta_h.function_space().mesh()
-    markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
-
-    v = 0.0
-    for i in indices:
-        if v >= fraction:
-            break
-        markers[int(i)] = True
-        v += etas[i]
-
-    return markers
-
-def dorfler_parallel(eta_h, theta):
+    Marks the smallest set of cells such that the sum of the squared errors of
+    the set is greater than theta times the total squared error.
+    """
     mesh = eta_h.function_space().mesh()
     comm = mesh.mpi_comm()
+    dofmap = eta_h.function_space().dofmap()
 
-    # NOTE: Check the necessity of this loop.
     etas = MeshFunction("double", mesh, mesh.topology().dim(), 0.0)
     for c in cells(mesh):
-        etas[c] = eta_h.vector()[c.index()]
+        etas[c] = eta_h.vector()[dofmap.cell_dofs(c.index())]
 
     markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
     markers_local = np.copy(markers.array())
@@ -86,14 +68,19 @@ def dorfler_parallel(eta_h, theta):
 def maximum(eta_h, theta):
     """Maximum marking strategy"""
     mesh = eta_h.function_space().mesh()
-    etas = eta_h.vector().get_local()
+    V = eta_h.function_space()
+    dofmap = V.dofmap()
+
+    etas = MeshFunction("double", mesh, mesh.topology().dim(), 0.0)
+    for c in cells(mesh):
+        etas[c] = eta_h.vector()[dofmap.cell_dofs(c.index())]
 
     eta_max = eta_h.vector().max()
     frac = theta*eta_max
 
     markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
-    marked = np.zeros_like(etas, dtype=np.bool)
-    marked[np.where(etas > frac)] = True
+    marked = np.zeros_like(etas.array(), dtype=np.bool)
+    marked[np.where(etas.array() > frac)] = True
     markers.set_values(marked)
 
     return markers
