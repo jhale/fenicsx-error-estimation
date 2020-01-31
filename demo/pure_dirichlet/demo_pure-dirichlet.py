@@ -5,9 +5,13 @@ import numpy as np
 from dolfin import *
 import fenics_error_estimation
 
-mesh = UnitSquareMesh(120, 120)
+parameters["ghost_mode"] = "shared_facet"
 
-k = 1
+mesh = UnitSquareMesh(16, 16)
+mesh = refine(mesh, redistribute=True)
+mesh = refine(mesh, redistribute=True)
+
+k = 3
 V = FunctionSpace(mesh, "CG", k)
 
 u = TrialFunction(V)
@@ -83,4 +87,4 @@ print("Bank-Weiser error from estimator: {}".format(error_bw))
 
 
 def test():
-    assert(np.allclose(error_exact, error_bw, 1E-2))
+    assert(np.allclose(error_exact, error_bw, rtol=0.1))
