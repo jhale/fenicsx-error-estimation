@@ -4,6 +4,9 @@ Brief description of demos
 
 Ordering is from simplest to most complex.
 
+Poisson
+=======
+
 ``pure_dirichlet/demo_pure-dirichlet.py`` - Poisson problem, Bank-Weiser
 estimator, pure Dirichlet boundary conditions. No adaptive mesh refinement.
 
@@ -20,3 +23,9 @@ sum of estimators.
 
 ``three-dimensions/demo_three-dimensions.py`` - 3D corner problem, Bank-Weiser
 estimator, pure Dirichlet conditions, adaptive mesh refinement.
+
+Incompressible elasticity
+=========================
+
+``incompressible-elasticity/demo_incompressible-elasticity.py`` - Square Domain,
+Khan-Powell-Silvester estimator, residual estimator, adaptive mesh refinement.

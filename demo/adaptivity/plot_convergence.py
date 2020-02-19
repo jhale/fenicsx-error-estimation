@@ -37,3 +37,17 @@ marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"]
 annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
 plt.legend()
 plt.savefig("output/error.pdf")
+fig = plt.figure()
+eff_bw = np.divide(df["error"].values, df["error_bw"].values)
+x = np.arange(len(eff_bw))
+
+height = 3.50394/1.608
+width = 3.50394
+plt.rcParams.update({'font.size': 8})
+plt.rcParams.update({'lines.markersize': 5})
+plt.rcParams.update({'figure.figsize': [width, height]})
+plt.rcParams.update({'figure.autolayout': True})
+fig = plt.figure()
+plt.plot(x, eff_bw, '^-', label="Efficiency BW")
+plt.legend()
+plt.savefig("output/efficiency.pdf")

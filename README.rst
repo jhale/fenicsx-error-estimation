@@ -32,6 +32,11 @@ estimation techniques for the Poisson problem:
 - Recovery estimator of Zienkiewicz-Zhu,
 - Explicit residual estimator of Babuška and Rheinbolt.
 
+and the following error estimation techniques for the incompressible
+elasticity problem:
+
+- Implicit residual estimator of Khan, Powell and Silvester.
+
 The following marking strategies:
 
 - Maximum (bulk),
