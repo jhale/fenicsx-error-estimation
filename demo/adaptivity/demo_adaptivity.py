@@ -18,7 +18,7 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
     u_exact_code = f.read()
 
-k = 2
+k = 1
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), element=FiniteElement("CG", triangle, k + 3))
 
 def main():
@@ -33,7 +33,7 @@ def main():
         exit()
 
     results = []
-    for i in range(0, 16):
+    for i in range(0, 15):
         result = {}
 
         V = FunctionSpace(mesh, "CG", k)
@@ -105,7 +105,7 @@ def solve(V):
 def estimate(u_h):
     mesh = u_h.function_space().mesh()
 
-    element_f = FiniteElement("DG", triangle, k + 1)
+    element_f = FiniteElement("DG", triangle, k + 2)
     element_g = FiniteElement("DG", triangle, k)
 
     N = fenics_error_estimation.create_interpolation(element_f, element_g)

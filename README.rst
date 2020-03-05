@@ -32,10 +32,15 @@ estimation techniques for the Poisson problem:
 - Recovery estimator of Zienkiewicz-Zhu,
 - Explicit residual estimator of Babuška and Rheinbolt.
 
-and the following error estimation techniques for the incompressible
+the following error estimation techniques for the incompressible
 elasticity problem:
 
 - Implicit residual estimator of Khan, Powell and Silvester.
+
+and the following error estimation techniques for the Stokes
+problem:
+
+- Implicit residual estimator of Liao and Silvester.
 
 The following marking strategies:
 
@@ -108,11 +113,8 @@ polynomial finite element spaces.
 **Question:** What will happen when FEniCSX
 https://fenicsproject.org/fenics-project-roadmap-2019/ is released?
 
-**Answer:** The core routine in this package, a projected local assembler, will be
-reimplemented in Numba (http://numba.pydata.org/). The additional flexibility
-over the current C++ assembler will allow us to (straightforwardly) extend the
-package to error estimators for more complex problems, e.g. Stokes, incompressible
-elasticity, and singularly-perturbed reaction-diffusion equations.
+**Answer:** The core C++ routine in this package, a projected local assembler, will be
+reimplemented in Numba (http://numba.pydata.org/).
 
 **Question:** What about method x?
 

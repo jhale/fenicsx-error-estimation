@@ -1,6 +1,7 @@
 ## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 ## SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
+import scipy.linalg as sp
 from dolfin import *
 
 def create_interpolation(element_f, element_g):
@@ -88,5 +89,4 @@ def create_interpolation(element_f, element_g):
     N_red = P[:, mask]
     assert(not np.all(np.iscomplex(N_red)))
     assert(np.linalg.matrix_rank(N_red) == V_f_dim - V_g_dim)
-
     return N_red

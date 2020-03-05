@@ -29,3 +29,9 @@ Incompressible elasticity
 
 ``incompressible-elasticity/demo_incompressible-elasticity.py`` - Square Domain,
 Khan-Powell-Silvester estimator, residual estimator, adaptive mesh refinement.
+
+Stokes
+======
+
+``incompressible-elasticity/demo_incompressible-elasticity.py`` - Square Domain,
+Liao-Silvester estimator, residual estimator, adaptive mesh refinement.
