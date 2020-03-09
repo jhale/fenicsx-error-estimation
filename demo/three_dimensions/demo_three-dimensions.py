@@ -1,5 +1,11 @@
 ## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 ## SPDX-License-Identifier: LGPL-3.0-or-later
+
+# Three-dimensional Poisson problem using Bank-Weiser estimator.  Proof of
+# reliability of this estimator in Removing the saturation assumption in
+# Bank-Weiser error estimator analysis in dimension three Bulle et al.
+# https://hal.archives-ouvertes.fr/hal-02482235
+
 import pandas as pd
 import numpy as np
 

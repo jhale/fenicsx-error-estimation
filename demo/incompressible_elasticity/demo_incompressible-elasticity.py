@@ -48,6 +48,7 @@ def main():
     V_el = MixedElement([X_el, M_el])
 
     results = []
+    # Standard solve, estimate, mark, refine loop.
     for i in range(0, 10):
         V = FunctionSpace(mesh, V_el)
 
@@ -161,7 +162,13 @@ def estimate(w_h):
     u_h = w_h.sub(0)
     p_h = w_h.sub(1)
 
+    # The first estimation problem consists of two Poisson sub-problems. We
+    # solve both simultaneously in block diagonal system.
     X_element_f = VectorElement('DG', triangle, 3)
+
+    # We construct the interpolation operator between the fine and coarse space
+    # by placing two scalar interpolation operators into a block diagonal
+    # system.
     S_element_f = FiniteElement('DG', triangle, 3)
     S_element_g = FiniteElement('DG', triangle, 1)
 
@@ -179,6 +186,7 @@ def estimate(w_h):
 
     bcs = DirichletBC(X_f, Constant((0., 0.)), 'on_boundary', 'geometric')
 
+    # Cell and edge residual equations from Khan et al.
     n = FacetNormal(mesh)
     R_K = f + div(2.*mu*sym(grad(u_h))) - grad(p_h)
     I = Identity(2)
@@ -186,11 +194,15 @@ def estimate(w_h):
     R_E = (1./2.)*jump(p_h*I - 2.*mu*sym(grad(u_h)), -n)
     rho_d = 1./(lmbda**(-1)+(2.*mu)**(-1))
 
+    # Local estimation problem
     a_X_e = 2.*mu*inner(grad(e_X), grad(v_X))*dx
     L_X_e = inner(R_K, v_X)*dx - inner(R_E, avg(v_X))*dS
 
+    # Solve the two Poisson estimation problems on the special space.
     e_h = fenics_error_estimation.estimate(a_X_e, L_X_e, N_X, bcs)
 
+    # The second estimation problem. Local projection of cell residual to
+    # special space.
     M_element_f = FiniteElement('DG', triangle, 2)
     M_element_g = FiniteElement('DG', triangle, 1)
 
@@ -202,6 +214,7 @@ def estimate(w_h):
     p_M_f = TrialFunction(M_f)
     q_M_f = TestFunction(M_f)
 
+    # From Khan et al.
     a_M_e = rho_d**(-1)*inner(p_M_f, q_M_f)*dx
 
     r_K = div(u_h) + (1./lmbda)*p_h
@@ -209,6 +222,7 @@ def estimate(w_h):
 
     eps_h = fenics_error_estimation.estimate(a_M_e, L_M_e, N_M)
 
+    # Compute the Khan et al. local estimator.
     V_e = FunctionSpace(mesh, 'DG', 0)
     v = TestFunction(V_e)
 
