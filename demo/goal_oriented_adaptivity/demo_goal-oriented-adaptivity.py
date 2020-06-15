@@ -1,5 +1,15 @@
 ## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 ## SPDX-License-Identifier: LGPL-3.0-or-later
+
+# This demo uses a weighted goal-oriented estimator (WGO) strategy from Becker,
+# Estecahandy and Trujillo http://dx.doi.org/10.1137/100794298 to drive an
+# adaptive mesh refinement algorithm that reduces error in a goal functional.
+# In short, a local error estimator is calculated on the primal Poisson problem,
+# and on the dual Poisson problem. A weighted combination of both is taken to
+# drive adaptive mesh refinement.
+
+# The full mathematical details are given in the accompanying paper Bulle et al.
+
 import os
 
 import numpy as np
@@ -89,6 +99,8 @@ def main():
 
 
 def primal_solve(V):
+    """Entirely standard Poisson problem with non-homogeneous boundary
+    conditions."""
     u = TrialFunction(V)
     v = TestFunction(V)
 
@@ -112,6 +124,7 @@ def primal_solve(V):
 
 
 def J(v):
+    """Goal functional."""
     eps_f = 0.35
     centre_x = 0.2
     centre_y = 0.2
@@ -128,6 +141,7 @@ def J(v):
 
 
 def dual_solve(u_h):
+    """Standard dual solution of Poisson problem (self-adjoint)."""
     V = u_h.function_space()
 
     z = TrialFunction(V)
@@ -151,6 +165,8 @@ def dual_solve(u_h):
 
 
 def estimate(u_h):
+    """Identical to other Poisson demos, can be used for both the primal and
+    dual problems."""
     mesh = u_h.function_space().mesh()
 
     element_f = FiniteElement("DG", triangle, k + 1)

@@ -39,6 +39,7 @@ e = TrialFunction(V_f)
 v = TestFunction(V_f)
 
 n = FacetNormal(mesh)
+# Local Bank-Weiser error estimation problems
 a_e = inner(grad(e), grad(v))*dx
 L_e = inner(f + div(grad(u_h)), v)*dx + \
       inner(jump(grad(u_h), -n), avg(v))*dS + \
