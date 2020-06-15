@@ -30,8 +30,7 @@ dark_map = [cm.get_cmap("tab20b")(i/20.) for i in range(20)]
 
 df_bw = pd.read_pickle('output/results.pkl')
 
-
-print('Results:\n')
+print('BW adaptive:\n')
 print(df_bw)
 
 x = np.log(df_bw['num_dofs'].values[-5:])
@@ -57,31 +56,25 @@ plt.rcParams.update({'lines.markersize': 5})
 plt.rcParams.update({'figure.figsize': [width, height]})
 plt.rcParams.update({'figure.autolayout': True})
 plt.figure()
-
 plt.loglog(df_bw["num_dofs"], df_bw['error_bw'], '^-',
-           label=r"$\eta_{\mathrm{bw}}$ (P3\P1)", color=dark_map[0])
-
+           label=r"$\eta_{\mathrm{bw}}$", color=dark_map[0])
 plt.loglog(df_bw["num_dofs"], df_bw['error_res'], '^-',
            label=r"$\eta_{\mathrm{res}}$", color=dark_map[4])
-
 plt.loglog(df_bw["num_dofs"], df_bw["exact_error"], '--',
            label=r"Exact error", color=dark_map[12])
-
 plt.xlabel("Number of dof")
 plt.ylabel("$\eta$")
 
-marker_x, marker_y = marker(df_bw["num_dofs"].values, [df_bw['exact_error'].values, df_bw["error_bw"].values, df_bw["error_res"].values], 0.4, 0.05)
+marker_x, marker_y = marker(df_bw["num_dofs"].values, [df_bw["error_bw"].values, df_bw["error_res"].values, df_bw["exact_error"].values], 0.4, 0.05)
 annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
 plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-           ncol=2, mode="expand", borderaxespad=0.)
+           ncol=3, mode="expand", borderaxespad=0.)
 plt.savefig('output/error.pdf')
-
 
 plt.figure()
 steps = np.arange(len(df_bw['num_dofs'].values))
 bw_eff = np.divide(df_bw['error_bw'].values, df_bw['exact_error'].values)
 res_eff = np.divide(df_bw['error_res'].values, df_bw['exact_error'].values)
-
 print('BW eff:', bw_eff)
 print('Res eff:', res_eff)
 plt.plot(steps, bw_eff, '^-', label=r"$\frac{||\nabla(u - u_h)||}{\eta_{\mathrm{bw}}}$", color=dark_map[0])
@@ -91,7 +84,5 @@ xmin, xmax, ymin, ymax = plt.axis()
 plt.hlines(1., xmin, xmax)
 plt.xlabel('Refinement steps')
 plt.ylabel('Efficiencies')
-plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-           ncol=2, mode="expand", borderaxespad=0.)
+plt.legend()
 plt.savefig('output/efficiencies.pdf')
-
