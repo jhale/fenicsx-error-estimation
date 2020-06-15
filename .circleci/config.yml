@@ -14,9 +14,11 @@ jobs:
 
       - run:
           name: Run unit tests
-          command: python3 -m pytest -v test/
+          command: python3 -m pytest -v --junitxml=~/junit/test-results.xml test/
 
       - run:
           name: Run demos
-          command: python3 -m pytest -v demo/
+          command: python3 -m pytest -v --junitxml=~/junit/demo-results.xml demo/
 
+      - store_test_results:
+          path: ~/junit/

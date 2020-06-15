@@ -1,7 +1,7 @@
 ## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 ## SPDX-License-Identifier: LGPL-3.0-or-later
 
-# Mixed robust incompressible linear elasticity error estimator from Khan,
+# Mixed robust nearly-incompressible linear elasticity error estimator from Khan,
 # Powell and Silvester (2019) https://doi.org/10.1002/nme.6040. We solve
 # the problem from Carstensen and Gedicke https://doi.org/10.1016/j.cma.2015.10.001.
 #
@@ -22,10 +22,12 @@
 
 import pandas as pd
 import numpy as np
+import scipy as sp
 
 from dolfin import *
 import ufl
 
+from fenics_error_estimation.interpolate import create_interpolation
 import fenics_error_estimation
 
 parameters["ghost_mode"] = "shared_facet"
@@ -33,11 +35,11 @@ parameters["form_compiler"]["optimize"] = True
 parameters["form_compiler"]["cpp_optimize"] = True
 
 mu = 100.  # First Lamé coefficien
-nu = .499   # Poisson ratio
+nu = .499    # Poisson ratio
 lmbda = 2.*mu*nu/(1.-2.*nu)  # Second Lamé coefficient
 
 def main():
-    K = 5
+    K = 10
     mesh = UnitSquareMesh(K, K)
 
     X_el = VectorElement('CG', triangle, 2)
@@ -75,16 +77,16 @@ def main():
         print('Refining...')
         mesh = refine(mesh, markers, redistribute=True)
 
-        with XDMFFile('output/bank-weiser/mesh_{}.xdmf'.format(str(i).zfill(4))) as f:
+        with XDMFFile('output/mesh_{}.xdmf'.format(str(i).zfill(4))) as f:
             f.write(mesh)
 
-        with XDMFFile('output/bank-weiser/disp_{}.xdmf'.format(str(i).zfill(4))) as f:
+        with XDMFFile('output/disp_{}.xdmf'.format(str(i).zfill(4))) as f:
             f.write_checkpoint(w_h.sub(0), 'u_{}'.format(str(i).zfill(4)))
 
-        with XDMFFile('output/bank-weiser/pres_{}.xdmf'.format(str(i).zfill(4))) as f:
+        with XDMFFile('output/pres_{}.xdmf'.format(str(i).zfill(4))) as f:
             f.write_checkpoint(w_h.sub(1), 'p_{}'.format(str(i).zfill(4)))
 
-        with XDMFFile('output/bank-weiser/eta_{}.xdmf'.format(str(i).zfill(4))) as f:
+        with XDMFFile('output/eta_{}.xdmf'.format(str(i).zfill(4))) as f:
             f.write_checkpoint(eta_h, 'eta_{}'.format(str(i).zfill(4)))
 
         results.append(result)
@@ -103,16 +105,7 @@ def solve(V):
     f = Expression(('-2.*mu*pow(pi,3)*cos(pi*x[1])*sin(pi*x[1])*(2.*cos(2.*pi*x[0]) - 1.)', '2.*mu*pow(pi,3)*cos(pi*x[0])*sin(pi*x[0])*(2.*cos(2.*pi*x[1]) -1.)'),
                    mu=mu, degree=4)
 
-    w_exact = Expression(('pi*cos(pi*x[1])*pow(sin(pi*x[0]), 2)*sin(pi*x[1])', '-pi*cos(pi*x[0])*pow(sin(pi*x[1]), 2)*sin(pi*x[0])', '0'),
-                         mu=mu, degree=4)
-    u_exact = Expression(('pi*cos(pi*x[1])*pow(sin(pi*x[0]), 2)*sin(pi*x[1])', '-pi*cos(pi*x[0])*pow(sin(pi*x[1]), 2)*sin(pi*x[0])'),
-                         mu=mu, degree=4)
-    p_exact = Expression('0', degree=0)
-
-    X_el = VectorElement('CG', triangle, 2)
-
-    V_u = FunctionSpace(mesh, X_el)
-
+    w_exact = Expression(('pi*cos(pi*x[1])*pow(sin(pi*x[0]), 2)*sin(pi*x[1])', '-pi*cos(pi*x[0])*pow(sin(pi*x[1]), 2)*sin(pi*x[0])', '0'), degree = 4)
 
     (u, p) = TrialFunctions(V)
     (v, q) = TestFunctions(V)
@@ -144,10 +137,6 @@ def solve(V):
         f.write_checkpoint(u_h, 'u_h')
     with XDMFFile('output/pressure.xdmf') as f:
         f.write_checkpoint(p_h, 'p_h')
-
-    u_exact_h = project(u_exact, V_u)
-    with XDMFFile('output/exact_displacement.xdmf') as xdmf:
-        xdmf.write_checkpoint(u_exact_h, 'u_exact_h')
 
     X_el_f = VectorElement('CG', triangle, 3)
     M_el_f = FiniteElement('CG', triangle, 2)
@@ -183,8 +172,9 @@ def estimate(w_h):
     S_element_f = FiniteElement('DG', triangle, 3)
     S_element_g = FiniteElement('DG', triangle, 1)
 
-    N_X = fenics_error_estimation.create_interpolation(
-        X_element_f, X_element_g)
+    N_S = create_interpolation(
+        S_element_f, S_element_g)
+    N_X = sp.linalg.block_diag(N_S, N_S)
 
     X_f = FunctionSpace(mesh, X_element_f)
 
@@ -228,6 +218,9 @@ def estimate(w_h):
     a_M_e = rho_d**(-1)*inner(p_M_f, q_M_f)*dx
 
     r_K = div(u_h) + (1./lmbda)*p_h
+    L_M_e = inner(r_K, q_M_f)*dx
+
+    eps_h = fenics_error_estimation.estimate(a_M_e, L_M_e, N_M)
 
     # Compute the Khan et al. local estimator.
     V_e = FunctionSpace(mesh, 'DG', 0)
@@ -235,7 +228,7 @@ def estimate(w_h):
 
     eta_h = Function(V_e)
     eta = assemble(2.*mu*inner(inner(grad(e_h), grad(e_h)), v)*dx + \
-          rho_d*inner(inner(r_K, r_K), v)*dx)
+          rho_d**(-1)*inner(inner(eps_h, eps_h), v)*dx)
     eta_h.vector()[:] = eta
 
     return eta_h

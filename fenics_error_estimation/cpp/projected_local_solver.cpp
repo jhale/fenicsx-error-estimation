@@ -40,8 +40,8 @@ void projected_local_solver(dolfin::Function& e,
     // Local element tensors, solver.
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                 Eigen::RowMajor> A_e, A_e_0, b_e, b_e_0, x_e, x_e_0, NT;
-    Eigen::LLT<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                             Eigen::RowMajor>> cholesky;
+    Eigen::FullPivLU<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                             Eigen::RowMajor>> solver;
 
     // To store global error result.
     //auto e = std::make_shared<Function>(L.function_space(0));
@@ -125,8 +125,8 @@ void projected_local_solver(dolfin::Function& e,
         b_e_0.noalias() = NT*b_e;
 
         // Solve
-        cholesky.compute(A_e_0);
-        x_e_0 = cholesky.solve(b_e_0);
+        solver.compute(A_e_0);
+        x_e_0 = solver.solve(b_e_0);
 
         // Apply projection back to V_f.
         x_e.noalias() = N*x_e_0;
