@@ -72,6 +72,7 @@ def estimate(u_h):
     # We need this for the local dof mapping. Not used for constructing a form.
     element_f_cg = ufl.FiniteElement("CG", ufl.triangle, 2)
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element()) 
@@ -90,8 +91,12 @@ def estimate(u_h):
     a_e = inner(grad(e), grad(v))*dx
     L_e = inner(f + div((grad(u))), v)*dx + inner(jump(grad(u), -n), avg(v))*dS
 
+    V_e = ufl.FunctionSpace(ufl_mesh, element_e)
     e_h = ufl.Coefficient(V_f)
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v)*dx
+    v_e = ufl.TestFunction(V_e)
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e)*dx
+
+    N = np.load("interpolation.npy")
 
     a_form = dolfinx.jit.ffcx_jit(a_e)
     L_form = dolfinx.jit.ffcx_jit(L_e)
@@ -120,6 +125,9 @@ def estimate(u_h):
     V_dolfin = u_h.function_space
     mesh = V_dolfin.mesh
 
+    # Space for final assembly of error
+    V_e = FunctionSpace(mesh, element_e)
+
     x = mesh.geometry.x
     x_dofs = mesh.geometry.dofmap
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
@@ -137,8 +145,6 @@ def estimate(u_h):
     # Geometry [restriction][num_dofs][gdim]
     coefficients = np.zeros((1, 1, 3), dtype=PETSc.ScalarType)
     geometry = np.zeros((1, 3, 2))
-
-    # To tabulate 
 
     # Interior facet integrals
     # Output for two adjacent cells
@@ -162,8 +168,12 @@ def estimate(u_h):
     tdim = mesh.topology.dim
     f_to_c = mesh.topology.connectivity(tdim - 1, tdim)
     c_to_f = mesh.topology.connectivity(tdim, tdim - 1)
-    # TODO: Check this is the convention.
+    # TODO: Check this is the right convention.
     local_f_to_v = {0: [1, 2], 1: [2, 0], 2: [0, 1]}
+
+    # Final error estimator calculation
+    # Output
+    eta_local = np.zeros(1, dtype=PETSc.ScalarType)
 
     for i in range(0, num_cells):
         c = x_dofs.links(i)
@@ -240,7 +250,6 @@ def estimate(u_h):
 
         # Is one of the current cell's facets or vertices on the boundary?
         local_dofs = []
-        vertices = np.array(2, dtype=np.intc)
         for j, facet in enumerate(facets_for_cell):
             global_facet = boundary_facets[np.where(facet == boundary_facets)[0]]
             # If no local facet is on a boundary facet exit the loop
@@ -269,13 +278,24 @@ def estimate(u_h):
             b_local[j] = 0.0
 
         # Project
+        A_0 = N.T@A_local@N
+        b_0 = N.T@b_local
 
         # Solve
+        e_0 = np.linalg.solve(A_0, b_0)
 
         # Project back
+        e = N@e_0
 
-        # Assemble error form into vector on DG_0 space
-        # Can be done using direct view into underlying vector so straightforward
+        # Compute eta on cell
+        eta_local.fill(0.0)
+        L_eta_kernel_cell(ffi.cast("double *", ffi.from_buffer(eta_local)),
+                          ffi.cast("double *", ffi.from_buffer(e)),
+                          ffi.NULL,
+                          ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
+                          ffi.NULL, 0)
+
+        # TODO: Assemble error form into vector on DG_0 space
 
 def main():
     u = primal()
