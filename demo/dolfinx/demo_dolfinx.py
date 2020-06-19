@@ -1,23 +1,26 @@
 import numpy as np
 
+import cffi
 from mpi4py import MPI
 from petsc4py import PETSc
-import cffi
-ffi = cffi.FFI()
 
 import dolfinx
 from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
 from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector,
                          locate_dofs_topological, set_bc)
-from dolfinx.mesh import locate_entities_boundary, create_mesh, Mesh
 from dolfinx.io import XDMFFile
+from dolfinx.mesh import Mesh, create_mesh, locate_entities_boundary
 
 import ufl
-from ufl import cos, dx, grad, inner, pi, sin, jump, avg, dS, div
+from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
+
+ffi = cffi.FFI()
+
 
 # Won't try to get it work with complex arithmetic at first
 assert dolfinx.has_petsc_complex == False
+
 
 def primal():
     mesh = RectangleMesh(
@@ -63,6 +66,7 @@ def primal():
 
     return u
 
+
 def estimate(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
     dx = ufl.Measure("dx", domain=ufl_mesh)
@@ -75,7 +79,7 @@ def estimate(u_h):
     # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 
-    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element()) 
+    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
     V_f = ufl.FunctionSpace(ufl_mesh, element_f)
 
     u = ufl.Coefficient(V)
@@ -110,14 +114,16 @@ def estimate(u_h):
     # Cell integral, one coefficient (CG1), no constants.
     L_kernel_cell = L_form.create_cell_integral(-1).tabulate_tensor
     # Interior facet integral, one coefficient, no constant.
-    L_kernel_interior = L_form.create_interior_facet_integral(-1).tabulate_tensor
+    L_kernel_interior = L_form.create_interior_facet_integral(
+        -1).tabulate_tensor
 
     # Cell integral, one coefficient (DG2), no constants.
     L_eta_kernel_cell = L_eta_form.create_cell_integral(-1).tabulate_tensor
 
     # Construct local entity dof map
     cg_tabulate_entity_dofs = cg_dofmap.tabulate_entity_dofs
-    cg_num_entity_dofs = np.frombuffer(ffi.buffer(cg_dofmap.num_entity_dofs), dtype=np.intc)
+    cg_num_entity_dofs = np.frombuffer(ffi.buffer(
+        cg_dofmap.num_entity_dofs), dtype=np.intc)
 
     entity_dofmap = [np.zeros(i, dtype=np.intc) for i in cg_num_entity_dofs]
 
@@ -206,7 +212,7 @@ def estimate(u_h):
             cells = f_to_c.links(f)
             # If there is no cell across the facet then it is an exterior facet
             if len(cells) != 2:
-                 continue
+                continue
 
             # What is the local facet number [0, 1, ...] in the attached cells
             # for the facet of interest?
@@ -236,7 +242,8 @@ def estimate(u_h):
             L_kernel_interior(ffi.from_buffer("double *", b_macro),
                               ffi.from_buffer("double *", coefficients_macro),
                               ffi.NULL,
-                              ffi.cast("double *", ffi.from_buffer(geometry_macro)),
+                              ffi.cast(
+                                  "double *", ffi.from_buffer(geometry_macro)),
                               ffi.cast("int *", ffi.from_buffer(local_facet)),
                               ffi.cast("uint8_t *", ffi.from_buffer(perm)),
                               0)
@@ -251,20 +258,23 @@ def estimate(u_h):
         # Is one of the current cell's facets or vertices on the boundary?
         local_dofs = []
         for j, facet in enumerate(facets_for_cell):
-            global_facet = boundary_facets[np.where(facet == boundary_facets)[0]]
+            global_facet = boundary_facets[np.where(
+                facet == boundary_facets)[0]]
             # If no local facet is on a boundary facet exit the loop
             if len(global_facet) == 0:
                 continue
 
             # TODO: Would need to handle edge dofs in 3D.
             # Local facet dofs
-            cg_tabulate_entity_dofs(ffi.from_buffer("int *", entity_dofmap[1]), 1, j)
+            cg_tabulate_entity_dofs(ffi.from_buffer(
+                "int *", entity_dofmap[1]), 1, j)
             local_dofs.append(np.copy(entity_dofmap[1]))
 
             # Local vertices attached to facet
             vertices = local_f_to_v[j]
             for k in range(2):
-                cg_tabulate_entity_dofs(ffi.from_buffer("int *", entity_dofmap[0]), 0, vertices[k])
+                cg_tabulate_entity_dofs(ffi.from_buffer(
+                    "int *", entity_dofmap[0]), 0, vertices[k])
                 local_dofs.append(np.copy(entity_dofmap[0]))
 
         local_dofs = np.unique(np.array(local_dofs).reshape(-1))
@@ -292,10 +302,13 @@ def estimate(u_h):
         L_eta_kernel_cell(ffi.cast("double *", ffi.from_buffer(eta_local)),
                           ffi.cast("double *", ffi.from_buffer(e)),
                           ffi.NULL,
-                          ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
+                          ffi.cast(
+                              "double *", ffi.from_buffer(geometry)), ffi.NULL,
                           ffi.NULL, 0)
 
         # TODO: Assemble error form into vector on DG_0 space
+        print(eta_local)
+
 
 def main():
     u = primal()
