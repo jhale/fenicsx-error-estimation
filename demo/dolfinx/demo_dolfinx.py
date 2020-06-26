@@ -93,7 +93,9 @@ def estimate(u_h):
     f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
 
     a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(f + div((grad(u))), v)*dx + inner(jump(grad(u), -n), avg(v))*dS
+    L_e = inner(f + div((grad(u))), v)*dx + inner(jump(grad(u), n), avg(v))*dS
+    #L_e = inner(f + div((grad(u))), v)*dx
+    #L_e = inner(jump(grad(u), n), avg(v))*dS
 
     V_e = ufl.FunctionSpace(ufl_mesh, element_e)
     e_h = ufl.Coefficient(V_f)
@@ -131,8 +133,17 @@ def estimate(u_h):
     V_dolfin = u_h.function_space
     mesh = V_dolfin.mesh
 
+    # DG2 space for debugging, can be removed once working
+    V_f = FunctionSpace(mesh, element_f)
+    e_h = Function(V_f)
+    e = e_h.vector
+    V_f_dofs = V_f.dofmap
+
     # Space for final assembly of error
     V_e = FunctionSpace(mesh, element_e)
+    eta_h = Function(V_e)
+    eta = eta_h.vector
+    V_e_dofs = V_e.dofmap
 
     x = mesh.geometry.x
     x_dofs = mesh.geometry.dofmap
@@ -192,12 +203,15 @@ def estimate(u_h):
         # Pack coefficients
         coefficients[0, 0, :] = u[V_dofs.cell_dofs(i)]
 
+        # Compared with DOLFIN-old, looks ok.
         A_local.fill(0.0)
         # No coefficients, no constants
         a_kernel_cell(ffi.cast("double *", ffi.from_buffer(A_local)), ffi.NULL,
                       ffi.NULL,
                       ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
                       ffi.NULL, 0)
+
+        # Compared with DOLFIN-old, looks ok, although small difference at 4-5th s.f.
         b_local.fill(0.0)
         L_kernel_cell(ffi.cast("double *", ffi.from_buffer(b_local)),
                       ffi.cast("double *", ffi.from_buffer(coefficients)),
@@ -205,11 +219,16 @@ def estimate(u_h):
                       ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
                       ffi.NULL, 0)
 
+        # NOTE: This interior facet part does not match with DOLFIN-old.
+        # NOTE: Try implementing standard interior facet assembler and compare?
+
         # TODO: Would be nice to reimplement links for numba version.
         # Alternative seems to be manually using offsets.
         facets_for_cell = c_to_f.links(i)
+        assert(len(facets_for_cell) == 3)
         for f in facets_for_cell:
             cells = f_to_c.links(f)
+            assert(len(cells) == 1 or 2)
             # If there is no cell across the facet then it is an exterior facet
             if len(cells) != 2:
                 continue
@@ -219,8 +238,9 @@ def estimate(u_h):
             local_facet = np.zeros(2, dtype=np.int)
             for j in range(0, 2):
                 facets = c_to_f.links(cells[j])
+                assert(len(facets) == 3)
                 index = np.where(facets == f)[0]
-                local_facet[j] = index[0]
+                local_facet[j] = index
 
             # Orientation
             perm[0] = perms[local_facet[0], cells[0]]
@@ -247,7 +267,6 @@ def estimate(u_h):
                               ffi.cast("int *", ffi.from_buffer(local_facet)),
                               ffi.cast("uint8_t *", ffi.from_buffer(perm)),
                               0)
-
             # Assemble the relevant part of the macro cell tensor into the
             # local cell tensor.
             # TODO: Generalise
@@ -255,6 +274,7 @@ def estimate(u_h):
             offset = 0 if index == 0 else 6
             b_local += b_macro[offset:offset + 6]
 
+        # NOTE: Not checked thoroughly passed here because previous not working.
         # Is one of the current cell's facets or vertices on the boundary?
         local_dofs = []
         for j, facet in enumerate(facets_for_cell):
@@ -295,20 +315,28 @@ def estimate(u_h):
         e_0 = np.linalg.solve(A_0, b_0)
 
         # Project back
-        e = N@e_0
+        e_local = N@e_0
+
+        # Assemble (temporary)
+        dofs = V_f_dofs.cell_dofs(i)
+        e.setValues(dofs, e_local)
 
         # Compute eta on cell
         eta_local.fill(0.0)
         L_eta_kernel_cell(ffi.cast("double *", ffi.from_buffer(eta_local)),
-                          ffi.cast("double *", ffi.from_buffer(e)),
+                          ffi.cast("double *", ffi.from_buffer(e_local)),
                           ffi.NULL,
                           ffi.cast(
                               "double *", ffi.from_buffer(geometry)), ffi.NULL,
                           ffi.NULL, 0)
 
-        # TODO: Assemble error form into vector on DG_0 space
-        print(eta_local)
+        # Assemble
+        dofs = V_e_dofs.cell_dofs(i)
+        eta.setValues(dofs, eta_local)
 
+    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(eta_h)
 
 def main():
     u = primal()
