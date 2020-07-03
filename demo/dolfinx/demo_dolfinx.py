@@ -93,9 +93,7 @@ def estimate(u_h):
     f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
 
     a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(f + div((grad(u))), v)*dx + inner(jump(grad(u), n), avg(v))*dS
-    #L_e = inner(f + div((grad(u))), v)*dx
-    #L_e = inner(jump(grad(u), n), avg(v))*dS
+    L_e = inner(jump(grad(u), -n), avg(v))*dS + inner(f + div((grad(u))), v)*dx
 
     V_e = ufl.FunctionSpace(ufl_mesh, element_e)
     e_h = ufl.Coefficient(V_f)
@@ -175,6 +173,9 @@ def estimate(u_h):
     # Permutations (local)
     perm = np.zeros(2, dtype=np.uint8)
 
+    # Local facets (local)
+    local_facet = np.zeros(2, dtype=np.intc)
+
     # TODO: Generalise
     # Data [coefficient][restriction][dof]
     coefficients_macro = np.zeros((1, 2, 3), dtype=PETSc.ScalarType)
@@ -235,7 +236,6 @@ def estimate(u_h):
 
             # What is the local facet number [0, 1, ...] in the attached cells
             # for the facet of interest?
-            local_facet = np.zeros(2, dtype=np.int)
             for j in range(0, 2):
                 facets = c_to_f.links(cells[j])
                 assert(len(facets) == 3)
@@ -332,7 +332,7 @@ def estimate(u_h):
 
         # Assemble
         dofs = V_e_dofs.cell_dofs(i)
-        eta.setValues(dofs, eta_local)
+        eta[dofs] = eta_local
 
     with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
