@@ -1,3 +1,10 @@
+# Copyright 2020, Jack S. Hale
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# This is a very rough and ready version of the Bank-Weiser estimator written
+# using DOLFINX. This will be translated to either Numba or C++ in due course
+# and generalised to arbitrary problems.
+
 import numpy as np
 
 import cffi
@@ -25,7 +32,7 @@ assert dolfinx.has_petsc_complex == False
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [3, 3],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [16, 16],
         CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -80,10 +87,10 @@ def estimate(u_h):
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
-    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
 
     u = ufl.Coefficient(V)
 
+    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
     e = ufl.TrialFunction(V_f)
     v = ufl.TestFunction(V_f)
 
@@ -130,12 +137,6 @@ def estimate(u_h):
     # Begin unpacking data
     V_dolfin = u_h.function_space
     mesh = V_dolfin.mesh
-
-    # DG2 space for debugging, can be removed once working
-    V_f = FunctionSpace(mesh, element_f)
-    e_h = Function(V_f)
-    e = e_h.vector
-    V_f_dofs = V_f.dofmap
 
     # Space for final assembly of error
     V_e = FunctionSpace(mesh, element_e)
@@ -220,9 +221,7 @@ def estimate(u_h):
                       ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
                       ffi.NULL, 0)
 
-        # NOTE: This interior facet part does not match with DOLFIN-old.
-        # NOTE: Try implementing standard interior facet assembler and compare?
-
+        # Compared with DOLFIN-old, looks ok.
         # TODO: Would be nice to reimplement links for numba version.
         # Alternative seems to be manually using offsets.
         facets_for_cell = c_to_f.links(i)
@@ -274,13 +273,12 @@ def estimate(u_h):
             offset = 0 if index == 0 else 6
             b_local += b_macro[offset:offset + 6]
 
-        # NOTE: Not checked thoroughly passed here because previous not working.
         # Is one of the current cell's facets or vertices on the boundary?
         local_dofs = []
         for j, facet in enumerate(facets_for_cell):
             global_facet = boundary_facets[np.where(
                 facet == boundary_facets)[0]]
-            # If no local facet is on a boundary facet exit the loop
+            # If facet is not a boundary facet exit the loop
             if len(global_facet) == 0:
                 continue
 
@@ -317,10 +315,6 @@ def estimate(u_h):
         # Project back
         e_local = N@e_0
 
-        # Assemble (temporary)
-        dofs = V_f_dofs.cell_dofs(i)
-        e.setValues(dofs, e_local)
-
         # Compute eta on cell
         eta_local.fill(0.0)
         L_eta_kernel_cell(ffi.cast("double *", ffi.from_buffer(eta_local)),
@@ -337,6 +331,9 @@ def estimate(u_h):
     with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
+
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta.array))))
+
 
 def main():
     u = primal()
