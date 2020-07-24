@@ -1,7 +1,8 @@
 ## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 ## SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
-import scipy.linalg as sp
+import scipy as sp
+from scipy import linalg
 from dolfin import *
 
 def create_interpolation(element_f, element_g):
@@ -55,8 +56,9 @@ def create_interpolation(element_f, element_g):
     V_g = FunctionSpace(mesh, element_g)
 
     V_f_dim = V_f.dim()
-    V_g_dim = V_g.dim()
 
+    V_g_dim = V_g.dim()
+ 
     assert(V_f_dim > V_g_dim)
 
     w = Function(V_f)
@@ -70,23 +72,18 @@ def create_interpolation(element_f, element_g):
     # Create a square matrix for interpolation from fine space to coarse one
     # with coarse space seen as a subspace of the fine one
     G = G_2@G_1
-    G[np.isclose(G, 0.0)] = 0.0
-
-    # Create square matrix of the interpolation on supplementary space of
-    # coarse space into fine space
-    N = np.eye(V_f.dim()) - G
 
     # Change of basis to reduce N as a diagonal with only ones and zeros
-    eigs, P = np.linalg.eig(N)
-    eigs = np.real(eigs)
-    P = np.real(P)
-    assert(np.count_nonzero(np.isclose(eigs, 1.0)) == V_f_dim - V_g_dim)
-    assert(np.count_nonzero(np.isclose(eigs, 0.0)) == V_g_dim)
-    mask = np.abs(eigs) > 0.5
+    _, eigs, P = linalg.svd(G)
 
+    assert(np.count_nonzero(np.isclose(eigs, 0.0)) == V_f_dim - V_g_dim)
+    assert(np.count_nonzero(np.logical_not(np.isclose(eigs, 0.0))) == V_g_dim)
+
+    null_mask = np.less(np.abs(eigs), 0.5)
     # Reduce N to get a rectangular matrix in order to reduce the linear system
     # dimensions
-    N_red = P[:, mask]
+    null_space = sp.compress(null_mask, P, axis=0)
+    N_red = sp.transpose(null_space)
     assert(not np.all(np.iscomplex(N_red)))
     assert(np.linalg.matrix_rank(N_red) == V_f_dim - V_g_dim)
     return N_red
