@@ -21,6 +21,13 @@ def estimate(a_e, L_e, N, bcs=[]):
     a_e_dolfin = _create_dolfin_form(a_e)
     L_e_dolfin = _create_dolfin_form(L_e)
 
+    assert(a_e_dolfin.rank() == 2)
+    assert(L_e_dolfin.rank() == 1)
+    assert(N.ndim == 2)
+    assert(N.shape[0] == a_e_dolfin.function_space(0).element().space_dimension())
+    assert(N.shape[0] == a_e_dolfin.function_space(1).element().space_dimension())
+    assert(N.shape[0] == L_e_dolfin.function_space(0).element().space_dimension())
+
     V_f = FunctionSpace(L_e_dolfin.function_space(0))
     e_V_f = Function(V_f)
 
