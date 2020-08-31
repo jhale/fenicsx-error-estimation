@@ -17,7 +17,7 @@ from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector,
                          locate_dofs_topological, set_bc)
 from dolfinx.io import XDMFFile
-from dolfinx.mesh import Mesh, create_mesh, locate_entities_boundary
+from dolfinx.mesh import locate_entities_boundary
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
