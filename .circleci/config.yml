@@ -13,6 +13,13 @@ jobs:
           command: python3 setup.py develop --user
 
       - run:
+          name: flake8 tests
+          command: |
+            python3 -m flake8 demo/
+            python3 -m flake8 fenics_error_estimation/
+            python3 -m flake8 tests/
+
+      - run:
           name: Run unit tests
           command: python3 -m pytest -v --junitxml=~/junit/test-results.xml test/
 

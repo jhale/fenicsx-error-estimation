@@ -1,13 +1,12 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import os
 import sys
 import platform
 import subprocess
 import multiprocessing
-import string
 
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
 if sys.version_info < (3, 5):
@@ -48,6 +47,7 @@ Programming Language :: Python :: 3.6
 Topic :: Scientific/Engineering :: Mathematics
 """
 
+
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=''):
         Extension.__init__(self, name, sources=[])
@@ -57,15 +57,10 @@ class CMakeExtension(Extension):
 class CMakeBuild(build_ext):
     def run(self):
         try:
-            out = subprocess.check_output(['cmake', '--version'])
+            subprocess.check_output(['cmake', '--version'])
         except OSError:
-            raise RuntimeError("CMake must be installed to build the following extensions: " +
-                               ", ".join(e.name for e in self.extensions))
-
-        if platform.system() == "Windows":
-            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
-            if cmake_version < '3.1.0':
-                raise RuntimeError("CMake >= 3.1.0 is required on Windows")
+            raise RuntimeError("CMake must be installed to build the following extensions: "
+                               + ", ".join(e.name for e in self.extensions))
 
         for ext in self.extensions:
             self.build_extension(ext)
@@ -101,22 +96,23 @@ class CMakeBuild(build_ext):
 
 
 def run_install():
-   setup(name="fenics_error_estimation",
-         description="Implicit and a posteriori error estimates in FEniCS",
-         version=VERSION,
-         author=AUTHORS,
-         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
-         license="LGPL version 3 or later",
-         author_email="mail@jackhale.co.uk",
-         maintainer_email="mail@jackhale.co.uk",
-         url=URL,
-         packages=["fenics_error_estimation"],
-         package_dir={"fenics_error_estimation": "fenics_error_estimation"},
-         ext_modules=[CMakeExtension("fenics_error_estimation.cpp", sourcedir="./fenics_error_estimation/cpp/")],
-         cmdclass=dict(build_ext=CMakeBuild),
-         platforms=["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
-         install_requires=REQUIREMENTS,
-         zip_safe=False)
+    setup(name="fenics_error_estimation",
+          description="Implicit and a posteriori error estimates in FEniCS",
+          version=VERSION,
+          author=AUTHORS,
+          classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
+          license="LGPL version 3 or later",
+          author_email="mail@jackhale.co.uk",
+          maintainer_email="mail@jackhale.co.uk",
+          url=URL,
+          packages=["fenics_error_estimation"],
+          package_dir={"fenics_error_estimation": "fenics_error_estimation"},
+          ext_modules=[CMakeExtension("fenics_error_estimation.cpp", sourcedir="./fenics_error_estimation/cpp/")],
+          cmdclass=dict(build_ext=CMakeBuild),
+          platforms=["Linux", "Solaris", "Mac OS-X", "Unix"],
+          install_requires=REQUIREMENTS,
+          zip_safe=False)
+
 
 if __name__ == "__main__":
     run_install()

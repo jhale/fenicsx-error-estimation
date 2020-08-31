@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 
 from dolfin import *
-from dolfin.fem.assembling import _create_dolfin_form
 
 from fenics_error_estimation import create_interpolation, estimate
 
 results_dirichlet = []
 results_neumann = []
+
 
 @pytest.fixture(params=itertools.product([1, 2], [2**4, 2**5, 2**6]))
 def mesh(request):
@@ -30,22 +30,20 @@ def mesh(request):
 @pytest.fixture
 def u_and_f_dirichlet(mesh, k):
     if mesh.geometry().dim() == 1:
-        return (Expression("sin(2.0*pi*x[0])", degree=k + 3), Expression("4.0*pi*pi*sin(2.0*pi*x[0])", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0])", degree=k + 3),
+                Expression("4.0*pi*pi*sin(2.0*pi*x[0])", degree=k + 3))
     elif mesh.geometry().dim() == 2:
-        return (Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3), Expression("8.0*pi*pi*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3),
+                Expression("8.0*pi*pi*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3))
     elif mesh.geometry().dim() == 3:
-        return (Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])*sin(2.0*pi*x[2])", degree=k + 3), Expression("12.0*pi*pi*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])*sin(2.0*pi*x[2])", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])*sin(2.0*pi*x[2])", degree=k + 3),
+                Expression("12.0*pi*pi*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])*sin(2.0*pi*x[2])", degree=k + 3))
     else:
         raise NotImplementedError
 
 
 @pytest.mark.parametrize('k', [1, 2])
 def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=False, estimate=estimate):
-    if k == 1:
-        k_g = k
-    else:
-        k_g = k - 1
-
     V = FunctionSpace(mesh, "CG", k)
     element_f = FiniteElement("DG", mesh.ufl_cell(), k + 1)
     element_g = FiniteElement("DG", mesh.ufl_cell(), k)
@@ -60,8 +58,8 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx
 
     bcs = [DirichletBC(V, Constant(0.0), boundary)]
 
@@ -81,15 +79,15 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
         bcs = [DirichletBC(V_f, Constant(0.0), boundary, "geometric")]
 
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+    a_e = inner(grad(e), grad(v)) * dx
+    L_e = inner(f + div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     N = create_interpolation(element_f, element_g)
 
     e_V_f = estimate(a_e, L_e, N, bcs)
 
-    error_bw = np.sqrt(assemble(inner(grad(e_V_f), grad(e_V_f))*dx))
+    error_bw = np.sqrt(assemble(inner(grad(e_V_f), grad(e_V_f)) * dx))
     error_exact = errornorm(u_exact, u_h, "H10")
 
     V_e = FunctionSpace(mesh, "DG", 0)
@@ -119,7 +117,7 @@ def test_local_pure_dirichlet(request, mesh, k, u_and_f_dirichlet, output_xdmf=F
     result["num_dofs"] = V.dim()
     result["error_bank_weiser"] = error_bw
     result["error_exact"] = error_exact
-    result["relative_error"] = error_bw/error_exact - 1.
+    result["relative_error"] = error_bw / error_exact - 1.
 
     results_dirichlet.append(result)
 
@@ -153,7 +151,7 @@ def test_convergence_rates_pure_dirichlet():
                 data['error_bank_weiser'].values), 1)[0]
             assert(rate > k - 0.1)
 
-            fig = plt.figure()
+            plt.figure()
             plt.loglog(data['hmax'], data['error_exact'], label="True error")
             plt.loglog(data['hmax'], data['error_bank_weiser'],
                        dashes=[6, 2], label="Bank-Weiser error")
@@ -205,22 +203,21 @@ def test_against_python_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
 @pytest.fixture
 def u_and_f_neumann(mesh, k):
     if mesh.geometry().dim() == 1:
-        return (Expression("sin(2.0*pi*x[0]-0.5*pi)", degree=k + 3), Expression("(4.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0]-0.5*pi)", degree=k + 3),
+                Expression("(4.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)", degree=k + 3))
     elif mesh.geometry().dim() == 2:
-        return (Expression("sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)", degree=k + 3), Expression("(8.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)", degree=k + 3),
+                Expression("(8.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)", degree=k + 3))
     elif mesh.geometry().dim() == 3:
-        return (Expression("sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)*sin(2.0*pi*x[2]-0.5*pi)", degree=k + 3), Expression("(12.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)*sin(2.0*pi*x[2]-0.5*pi)", degree=k + 3))
+        return (Expression("sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)*sin(2.0*pi*x[2]-0.5*pi)", degree=k + 3),
+                Expression("(12.0*pi*pi + 1)*sin(2.0*pi*x[0]-0.5*pi)*sin(2.0*pi*x[1]-0.5*pi)*sin(2.0*pi*x[2]-0.5*pi)",
+                           degree=k + 3))
     else:
         raise NotImplementedError
 
 
 @pytest.mark.parametrize('k', [1, 2])
 def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False, estimate=estimate):
-    if k == 1:
-        k_g = k
-    else:
-        k_g = k-1
-
     V = FunctionSpace(mesh, "CG", k)
     element_f = FiniteElement("DG", mesh.ufl_cell(), k + 1)
     element_g = FiniteElement("DG", mesh.ufl_cell(), k)
@@ -232,8 +229,8 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(u), grad(v))*dx + inner(u, v)*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx + inner(u, v) * dx
+    L = inner(f, v) * dx
 
     u_h = Function(V)
     A, b = assemble_system(a, L)
@@ -245,16 +242,16 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     v = TestFunction(V_f)
 
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx + inner(e, v)*dx
-    L_e = inner(f + div(grad(u_h)), v)*dx + inner(jump(grad(u_h), -n),
-                                                  avg(v))*dS - inner(inner(grad(u_h), n), v)*ds
+    a_e = inner(grad(e), grad(v)) * dx + inner(e, v) * dx
+    L_e = inner(f + div(grad(u_h)), v) * dx + inner(jump(grad(u_h), -n),
+                                                    avg(v)) * dS - inner(inner(grad(u_h), n), v) * ds
 
     N = create_interpolation(element_f, element_g)
 
     e_V_f = estimate(a_e, L_e, N, [])
 
     error_bw = np.sqrt(
-        assemble(inner(grad(e_V_f), grad(e_V_f))*dx + inner(e_V_f, e_V_f)*dx))
+        assemble(inner(grad(e_V_f), grad(e_V_f)) * dx + inner(e_V_f, e_V_f) * dx))
     error_exact = errornorm(u_exact, u_h, "H1")
 
     V_e = FunctionSpace(mesh, "DG", 0)
@@ -283,7 +280,7 @@ def test_local_pure_neumann(request, mesh, k, u_and_f_neumann, output_xdmf=False
     result["num_dofs"] = V.dim()
     result["error_bank_weiser"] = error_bw
     result["error_exact"] = error_exact
-    result["relative_error"] = error_bw/error_exact - 1.
+    result["relative_error"] = error_bw / error_exact - 1.
 
     results_neumann.append(result)
 
@@ -317,7 +314,7 @@ def test_convergence_rates_pure_neumann():
                 data['error_bank_weiser'].values), 1)[0]
             assert(rate > k - 0.1)
 
-            fig = plt.figure()
+            plt.figure()
             plt.loglog(data['hmax'], data['error_exact'], label="True error")
             plt.loglog(data['hmax'], data['error_bank_weiser'],
                        dashes=[6, 2], label="Bank-Weiser error")

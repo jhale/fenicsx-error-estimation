@@ -1,5 +1,5 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import pygmsh as pg
 import meshio
 

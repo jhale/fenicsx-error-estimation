@@ -1,5 +1,5 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 # Three-dimensional Poisson problem using Bank-Weiser estimator.  Proof of
 # reliability of this estimator in Removing the saturation assumption in
@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 
 from dolfin import *
-import ufl
 
 import fenics_error_estimation
 
@@ -19,12 +18,13 @@ parameters["ghost_mode"] = "shared_facet"
 parameters["form_compiler"]["optimize"] = True
 parameters["form_compiler"]["cpp_optimize"] = True
 
+
 def main():
     mesh = Mesh()
     try:
         with XDMFFile(MPI.comm_world, 'mesh.xdmf') as f:
             f.read(mesh)
-    except:
+    except RuntimeError:
         print(
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
@@ -63,14 +63,15 @@ def main():
         df.to_pickle("output/results.pkl")
         print(df)
 
+
 def solve(V):
     u = TrialFunction(V)
     v = TestFunction(V)
 
     f = Constant(1.0)
 
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx
 
     bcs = DirichletBC(V, Constant(0.0), "on_boundary")
 
@@ -114,22 +115,23 @@ def estimate(u_h):
     bcs = DirichletBC(V_f, Constant(0.0), "on_boundary", "geometric")
 
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+    a_e = inner(grad(e), grad(v)) * dx
+    L_e = inner(f + div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
-    error = norm(e_h, "H10")
+    # error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)
     v = TestFunction(V_e)
 
     eta_h = Function(V_e)
-    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
     eta_h.vector()[:] = eta
 
     return eta_h
+
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 # Poisson problem on L-shaped domain with adaptive mesh refinement.  This is a
 # classic problem shown in almost every paper on the topic.
@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 
 from dolfin import *
-import ufl
 
 import mpi4py.MPI
 
@@ -26,6 +25,7 @@ with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
 k = 2
 u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), element=FiniteElement("CG", triangle, k + 3))
 
+
 def main():
     comm = MPI.comm_world
     mesh = Mesh(comm)
@@ -34,7 +34,7 @@ def main():
     try:
         with XDMFFile(comm, os.path.join(current_dir, 'mesh.xdmf')) as f:
             f.read(mesh)
-    except:
+    except IOError:
         print(
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
@@ -70,7 +70,7 @@ def main():
         V_e = eta_h.function_space()
         eta_exact = Function(V_e, name="eta_exact")
         v = TestFunction(V_e)
-        eta_exact.vector()[:] = assemble(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v)*dx(mesh))
+        eta_exact.vector()[:] = assemble(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx(mesh))
         result["error_exact"] = np.sqrt(eta_exact.vector().sum())
         with XDMFFile("output/eta_exact_{}.xdmf".format(str(i).zfill(4))) as f:
             f.write(eta_exact)
@@ -98,6 +98,7 @@ def main():
         df.to_pickle("output/results.pkl")
         print(df)
 
+
 def solve(V):
     """Entirely standard Poisson solve with non-homogeneous Dirichlet
     conditions set according to exact solution"""
@@ -106,8 +107,8 @@ def solve(V):
 
     f = Constant(0.0)
 
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx
 
     def all_boundary(x, on_boundary):
         return on_boundary
@@ -148,17 +149,14 @@ def estimate(u_h):
 
     # Define the local Bank-Weiser problem on the full higher order space
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx
+    a_e = inner(grad(e), grad(v)) * dx
     # Residual
-    L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+    L_e = inner(f + div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Local solves on the implied Bank-Weiser space. The solution is returned
     # on the full space.
     e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
-
-    # Estimate of global error
-    error = norm(e_h, "H10")
 
     # Computation of local error indicator using the now classic assemble
     # tested against DG_0 trick.
@@ -166,7 +164,7 @@ def estimate(u_h):
     v = TestFunction(V_e)
 
     eta_h = Function(V_e, name="eta_h")
-    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
     eta_h.vector()[:] = eta
 
     return eta_h, e_h

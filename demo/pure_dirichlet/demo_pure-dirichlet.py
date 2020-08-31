@@ -1,5 +1,5 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 
 from dolfin import *
@@ -19,8 +19,8 @@ v = TestFunction(V)
 
 f = Expression("8.0*pi*pi*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3)
 
-a = inner(grad(u), grad(v))*dx
-L = inner(f, v)*dx
+a = inner(grad(u), grad(v)) * dx
+L = inner(f, v) * dx
 
 
 class Boundary(SubDomain):
@@ -28,13 +28,7 @@ class Boundary(SubDomain):
         return on_boundary
 
 
-boundary = Boundary()
-
-boundaries = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
-boundaries.set_all(1)
-boundary.mark(boundaries, 0)
-
-bcs = DirichletBC(V, Constant(0.0), boundaries, 0)
+bcs = DirichletBC(V, Constant(0.0), "on_boundary")
 
 u_h = Function(V)
 A, b = assemble_system(a, L, bcs=bcs)
@@ -51,13 +45,13 @@ V_f = FunctionSpace(mesh, element_f)
 e = TrialFunction(V_f)
 v = TestFunction(V_f)
 
-bc = DirichletBC(V_f, Constant(0.0), boundaries, 0)
+bc = DirichletBC(V_f, Constant(0.0), "on_boundary", "geometric")
 n = FacetNormal(mesh)
-a_e = inner(grad(e), grad(v))*dx
-L_e = inner(f + div(grad(u_h)), v)*dx + \
-    inner(jump(grad(u_h), -n), avg(v))*dS
+a_e = inner(grad(e), grad(v)) * dx
+L_e = inner(f + div(grad(u_h)), v) * dx + \
+    inner(jump(grad(u_h), -n), avg(v)) * dS
 
-e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
+e_h = fenics_error_estimation.estimate(a_e, L_e, N, bc)
 error = norm(e_h, "H10")
 
 # Computation of local error indicator
@@ -65,7 +59,7 @@ V_e = FunctionSpace(mesh, "DG", 0)
 v = TestFunction(V_e)
 
 eta_h = Function(V_e)
-eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
 eta_h.vector()[:] = eta
 
 u_exact = Expression("sin(2.0*pi*x[0])*sin(2.0*pi*x[1])", degree=k + 3)

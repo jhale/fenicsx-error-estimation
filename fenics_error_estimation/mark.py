@@ -1,10 +1,9 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 import mpi4py.MPI as MPI
 from dolfin import MeshFunction, cells
 
-import itertools
 
 def dorfler(eta_h, theta):
     """Equilibriated marking strategy of Dörfler.
@@ -37,7 +36,7 @@ def dorfler(eta_h, theta):
         # Indices biggest to smallest
         indices = np.argsort(eta_global)[::-1]
         sum_eta_global = np.sum(eta_global)
-        fraction = theta*sum_eta_global
+        fraction = theta * sum_eta_global
 
         # Find set with minimal cardinality.
         # TODO: Non-sequential memory access and tight loop.
@@ -76,7 +75,7 @@ def maximum(eta_h, theta):
         etas[c] = eta_h.vector()[dofmap.cell_dofs(c.index())]
 
     eta_max = eta_h.vector().max()
-    frac = theta*eta_max
+    frac = theta * eta_max
 
     markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
     marked = np.zeros_like(etas.array(), dtype=np.bool)

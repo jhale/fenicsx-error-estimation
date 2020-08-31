@@ -21,8 +21,8 @@ def _lagrange_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx
 
     bcs = [DirichletBC(V, Constant(0.0), boundary)]
 
@@ -32,16 +32,15 @@ def _lagrange_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
     solver = PETScKrylovSolver("cg", "hypre_amg")
     solver.solve(A, u_h.vector(), b)
 
-    e, l = TrialFunctions(V_f)
+    e, g = TrialFunctions(V_f)
     v, m = TestFunctions(V_f)
 
     n = FacetNormal(mesh)
-    h_T = CellVolume(mesh)
-    a_e = inner(grad(e), grad(v))*dx + Constant(1E5)*inner(e, v)*ds
-    b_e = inner(e, m)*dx + inner(v, l)*dx
+    a_e = inner(grad(e), grad(v)) * dx + Constant(1E5) * inner(e, v) * ds
+    b_e = inner(e, m) * dx + inner(v, g) * dx
 
-    L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+    L_e = inner(f + div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     A_e = assemble(a_e)
     B_e = assemble(b_e, form_compiler_parameters={
@@ -58,7 +57,7 @@ def _lagrange_pure_dirichlet(request, mesh, k, u_and_f_dirichlet):
     # Discard Lagrange multiplier
     e_V_f = el_V_f[0]
 
-    error_bw = np.sqrt(assemble(inner(grad(e_V_f), grad(e_V_f))*dx))
+    error_bw = np.sqrt(assemble(inner(grad(e_V_f), grad(e_V_f)) * dx))
     error_exact = errornorm(u_exact, u_h, "H10")
 
     result = {}
@@ -90,8 +89,8 @@ def _lagrange_pure_neumann(request, mesh, k, u_and_f_neumann):
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(u), grad(v))*dx + inner(u, v)*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx + inner(u, v) * dx
+    L = inner(f, v) * dx
 
     u_h = Function(V)
     A, b = assemble_system(a, L)
@@ -99,16 +98,15 @@ def _lagrange_pure_neumann(request, mesh, k, u_and_f_neumann):
     solver = PETScKrylovSolver("cg", "hypre_amg")
     solver.solve(A, u_h.vector(), b)
 
-    e, l = TrialFunctions(V_f)
+    e, g = TrialFunctions(V_f)
     v, m = TestFunctions(V_f)
 
     n = FacetNormal(mesh)
-    h_T = CellVolume(mesh)
-    a_e = inner(grad(e), grad(v))*dx + inner(e, v)*ds
-    b_e = inner(e, m)*dx + inner(v, l)*dx
+    a_e = inner(grad(e), grad(v)) * dx + inner(e, v) * ds
+    b_e = inner(e, m) * dx + inner(v, g) * dx
 
-    L_e = inner(f + div(grad(u_h)), v)*dx + inner(jump(grad(u_h), -n),
-                                                  avg(v))*dS - inner(inner(grad(u_h), n), v)*ds
+    L_e = inner(f + div(grad(u_h)), v) * dx + inner(jump(grad(u_h), -n),
+                                                    avg(v)) * dS - inner(inner(grad(u_h), n), v) * ds
 
     A_e = assemble(a_e)
     B_e = assemble(b_e, form_compiler_parameters={
@@ -126,7 +124,7 @@ def _lagrange_pure_neumann(request, mesh, k, u_and_f_neumann):
     e_V_f = el_V_f[0]
 
     error_bw = np.sqrt(
-        assemble(inner(grad(e_V_f), grad(e_V_f))*dx + inner(e_V_f, e_V_f)*dx))
+        assemble(inner(grad(e_V_f), grad(e_V_f)) * dx + inner(e_V_f, e_V_f) * dx))
     error_exact = errornorm(u_exact, u_h, "H1")
 
     result = {}
