@@ -12,16 +12,20 @@ parameters['ghost_mode'] = 'shared_facet'
 
 k = 1
 
+
 class BoundaryN(SubDomain):
     def inside(self, x, on_boundary):
         return on_boundary and (near(x[1], 0., DOLFIN_EPS) or near(x[1], 1., DOLFIN_EPS))
+
 
 class BoundaryD(SubDomain):
     def inside(self, x, on_boundary):
         return on_boundary and (near(x[0], 0., DOLFIN_EPS) or near(x[0], 1., DOLFIN_EPS))
 
+
 boundaryD = BoundaryD()
 boundaryN = BoundaryN()
+
 
 def main():
     mesh = UnitSquareMesh(5, 5)
@@ -35,8 +39,8 @@ def main():
         boundaryN.mark(boundary_marker, 1)
 
         x = ufl.SpatialCoordinate(mesh)
-        f = 10.*ufl.exp(-((x[0]-0.5)**2 + (x[1]-0.5)**2)/0.02)
-        g = ufl.sin(5.*x[0])
+        f = 10. * ufl.exp(-((x[0] - 0.5)**2 + (x[1] - 0.5)**2) / 0.02)
+        g = ufl.sin(5. * x[0])
 
         ds = Measure('ds', domain=mesh, subdomain_data=boundary_marker)
 
@@ -72,8 +76,8 @@ def solve(V, f, g, ds):
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx + inner(g, v)*ds(1)
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx + inner(g, v) * ds(1)
 
     bcs = DirichletBC(V, Constant(0.), boundaryD)
 
@@ -103,20 +107,20 @@ def bw_estimate(u_h, f, g, ds):
     bcs = DirichletBC(V_f, Constant(0.0), boundaryD, "geometric")
 
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(f + div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS + \
-        inner(g - inner(grad(u_h), n), v)*ds(1)
+    a_e = inner(grad(e), grad(v)) * dx
+    L_e = inner(f + div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS + \
+        inner(g - inner(grad(u_h), n), v) * ds(1)
 
     e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
-    error = norm(e_h, "H10")
+    # error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)
     v = TestFunction(V_e)
 
     eta_h = Function(V_e, name="eta_h")
-    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
     eta_h.vector()[:] = eta
     return eta_h
 

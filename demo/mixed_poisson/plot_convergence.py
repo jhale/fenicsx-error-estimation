@@ -18,7 +18,7 @@ else:
 
 
 def marker(x_data, y_datas, position, gap):
-    middle = np.floor(len(x_data)/2.).astype(int)
+    middle = np.floor(len(x_data) / 2.).astype(int)
     anchor_1_1 = []
     anchor_2_1 = []
 
@@ -33,14 +33,14 @@ def marker(x_data, y_datas, position, gap):
 
     anchor_1 = [anchor_1_0, anchor_1_1]
     anchor_2 = [anchor_2_0, anchor_2_1]
-    marker_x = anchor_1[0]**position*anchor_2[0]**(1.-position)\
-        * (anchor_2[1]/anchor_1[1])**gap
-    marker_y = anchor_1[1]**position*anchor_2[1]**(1.-position)\
-        * (anchor_1[0]/anchor_2[0])**gap
+    marker_x = anchor_1[0]**position * anchor_2[0]**(1. - position)\
+        * (anchor_2[1] / anchor_1[1])**gap
+    marker_y = anchor_1[1]**position * anchor_2[1]**(1. - position)\
+        * (anchor_1[0] / anchor_2[0])**gap
     return marker_x, marker_y
 
 
-dark_map = [cm.get_cmap("Dark2")(i/8.) for i in range(8)]
+dark_map = [cm.get_cmap("Dark2")(i / 8.) for i in range(8)]
 
 df_bw = pd.read_pickle('output/results.pkl')
 
@@ -53,7 +53,7 @@ A = np.vstack([x, np.ones(len(x))]).T
 m, c = np.linalg.lstsq(A, y)[0]
 print('BW slope =', m)
 
-height = 3.50394/1.608
+height = 3.50394 / 1.608
 width = 3.50394
 plt.rcParams.update({'font.size': 8})
 plt.rcParams.update({'lines.markersize': 5})
@@ -66,7 +66,7 @@ plt.loglog(df_bw["num_dofs"], df_bw['error_bw'], '^-',
 
 
 plt.xlabel("Number of dof")
-plt.ylabel("$\eta$")
+plt.ylabel(r"$\eta$")
 
 marker_x, marker_y = marker(df_bw["num_dofs"].values, [
                             df_bw["error_bw"].values], 0.4, 0.1)

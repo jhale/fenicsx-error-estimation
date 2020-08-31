@@ -1,5 +1,5 @@
-## Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-## SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 # This demo uses a weighted goal-oriented estimator (WGO) strategy from Becker,
 # Estecahandy and Trujillo http://dx.doi.org/10.1137/100794298 to drive an
@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 
 from dolfin import *
-import ufl
 
 import fenics_error_estimation
 
@@ -32,12 +31,13 @@ u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), degree=5)
 # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
 J_fine = 0.2010229183
 
+
 def main():
     mesh = Mesh()
     try:
         with XDMFFile(MPI.comm_world, os.path.join(current_dir, 'mesh.xdmf')) as f:
             f.read(mesh)
-    except:
+    except IOError:
         print(
             "Generate the mesh using `python3 generate_mesh.py` before running this script.")
         exit()
@@ -52,10 +52,10 @@ def main():
 
         J_h = assemble(J(u_h))
 
-        #V_f = FunctionSpace(mesh, "CG", 4)
-        #u_exact_V_f = interpolate(u_exact, V_f)
-        #J_exact_V_f = assemble(J(u_exact_V_f))
-        #print(J_exact_V_f)
+        # V_f = FunctionSpace(mesh, "CG", 4)
+        # u_exact_V_f = interpolate(u_exact, V_f)
+        # J_exact_V_f = assemble(J(u_exact_V_f))
+        # print(J_exact_V_f)
 
         z_h = dual_solve(u_h)
         with XDMFFile("output/z_h_{}.xdmf".format(str(i).zfill(4))) as f:
@@ -81,7 +81,7 @@ def main():
         result["error"] = np.abs(J_h - J_fine)
         result["error_hu"] = error_hu
         result["error_hz"] = error_hz
-        result["error_hw"] = error_hu*error_hz
+        result["error_hw"] = error_hu * error_hz
         result["hmin"] = mesh.hmin()
         result["hmax"] = mesh.hmax()
         result["num_dofs"] = V.dim()
@@ -97,27 +97,31 @@ def main():
     df.to_pickle("output/results.pkl")
     print(df)
 
+
 def F(v):
     """Primal problem linear form."""
     f = Constant(0.)
-    F = inner(f,v)*dx
+    F = inner(f, v) * dx
     return F
+
 
 def J(v):
     """Goal functional."""
     eps_f = 0.35
     centre_x = 0.2
     centre_y = 0.2
-    cpp_f = """
-    ((x[0] - centre_x)/eps_f)*((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f) < 1.0 ?
-    (1.0)*pow(eps_f, -2.0)*
-    exp(-1.0/(1.0 - (((x[0] - centre_x)/eps_f)*((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f)))) :
-    0.0"""
+    cpp_f = ("((x[0] - centre_x)/eps_f)*"
+             "((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f) < 1.0 ?"
+             "(1.0)*pow(eps_f, -2.0)*"
+             "exp(-1.0/(1.0 - (((x[0] - centre_x)/eps_f)"
+             "*((x[0] - centre_x)/eps_f) + ((x[1] - centre_y)/eps_f)*((x[1] - centre_y)/eps_f))))"
+             " : 0.0")
 
     c = Expression(cpp_f, eps_f=eps_f, centre_x=centre_x, centre_y=centre_y, degree=3)
-    J = inner(c, v)*dx
+    J = inner(c, v) * dx
 
     return J
+
 
 def primal_solve(V):
     """Entirely standard Poisson problem with non-homogeneous boundary
@@ -127,7 +131,7 @@ def primal_solve(V):
 
     L = F(v)
 
-    a = inner(grad(u), grad(v))*dx
+    a = inner(grad(u), grad(v)) * dx
 
     def all_boundary(x, on_boundary):
         return on_boundary
@@ -142,6 +146,7 @@ def primal_solve(V):
 
     return u_h
 
+
 def dual_solve(u_h):
     """Standard dual solution of Poisson problem (self-adjoint)."""
     V = u_h.function_space()
@@ -149,7 +154,7 @@ def dual_solve(u_h):
     z = TrialFunction(V)
     v = TestFunction(V)
 
-    a = inner(grad(z), grad(v))*dx
+    a = inner(grad(z), grad(v)) * dx
     J_v = J(v)
 
     def all_boundary(x, on_boundary):
@@ -164,6 +169,7 @@ def dual_solve(u_h):
     solver.solve(A, z_h.vector(), b)
 
     return z_h
+
 
 def estimate(u_h, F):
     """Identical to other Poisson demos, can be used for both the primal and
@@ -186,22 +192,23 @@ def estimate(u_h, F):
     bcs = DirichletBC(V_f, Constant(0.0), all_boundary, 'geometric')
 
     n = FacetNormal(mesh)
-    a_e = inner(grad(e), grad(v))*dx
-    L_e = F(v) + inner(div(grad(u_h)), v)*dx + \
-        inner(jump(grad(u_h), -n), avg(v))*dS
+    a_e = inner(grad(e), grad(v)) * dx
+    L_e = F(v) + inner(div(grad(u_h)), v) * dx + \
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
-    error = norm(e_h, "H10")
+    # error = norm(e_h, "H10")
 
     # Computation of local error indicator
     V_e = FunctionSpace(mesh, "DG", 0)
     v = TestFunction(V_e)
 
     eta_h = Function(V_e, name="eta")
-    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)*dx)
+    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
     eta_h.vector()[:] = eta
 
     return eta_h
+
 
 if __name__ == "__main__":
     main()

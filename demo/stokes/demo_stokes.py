@@ -4,13 +4,11 @@
 # Mixed robust Stokes error estimator from Liao and Silvester (2012)
 # https://doi.org/10.1016/j.apnum.2010.05.003.
 
-import os
 import pandas as pd
 import numpy as np
 import scipy as sp
 
 from dolfin import *
-import ufl
 
 import fenics_error_estimation
 from fenics_error_estimation.interpolate import create_interpolation
@@ -89,23 +87,20 @@ def solve(V):
 
     f = Constant((0., 0.))
 
-    w_exact = Expression(('20.*x[0]*pow(x[1], 3)', '5.*pow(x[0], 4)-5.*pow(x[1], 4)',
-                          '60.*pow(x[0], 2)*x[1]- 20.*pow(x[1], 3)'), degree=4)
-
     u_exact = Expression(
         ('20.*x[0]*pow(x[1], 3)', '5.*pow(x[0], 4)-5.*pow(x[1], 4)'), degree=4)
     p_exact = Expression('60.*pow(x[0], 2)*x[1]- 20.*pow(x[1], 3)', degree=4)
     (u, p, u_l) = TrialFunctions(V)
     (v, q, v_l) = TestFunctions(V)
 
-    a = inner(grad(u), grad(v))*dx
-    b = - inner(p, div(v))*dx
-    c = - inner(div(u), q)*dx
+    a = inner(grad(u), grad(v)) * dx
+    b = - inner(p, div(v)) * dx
+    c = - inner(div(u), q) * dx
 
-    d = inner(u_l, q)*dx + inner(v_l, p)*dx
+    d = inner(u_l, q) * dx + inner(v_l, p) * dx
     B = a + b + c + d
 
-    L = inner(f, v)*dx
+    L = inner(f, v) * dx
 
     bcs = DirichletBC(V.sub(0), u_exact, 'on_boundary')
 
@@ -183,12 +178,12 @@ def estimate(w_h):
 
     n = FacetNormal(mesh)
     R_T = f + div(grad(u_h)) - grad(p_h)
-    I = Identity(2)
+    Id = Identity(2)
 
-    R_E = (1./2.)*jump(-p_h*I + grad(u_h), -n)
+    R_E = (1. / 2.) * jump(-p_h * Id + grad(u_h), -n)
 
-    a_X_e = inner(grad(e_X), grad(v_X))*dx
-    L_X_e = inner(R_T, v_X)*dx - inner(R_E, 2.*avg(v_X))*dS
+    a_X_e = inner(grad(e_X), grad(v_X)) * dx
+    L_X_e = inner(R_T, v_X) * dx - inner(R_E, 2. * avg(v_X)) * dS
 
     e_h = fenics_error_estimation.estimate(a_X_e, L_X_e, N_X, bcs)
 
@@ -203,9 +198,9 @@ def estimate(w_h):
     p_M_f = TrialFunction(M_f)
     q_M_f = TestFunction(M_f)
 
-    a_M_e = inner(p_M_f, q_M_f)*dx
+    a_M_e = inner(p_M_f, q_M_f) * dx
     r_T = div(u_h)
-    L_M_e = inner(r_T, q_M_f)*dx
+    L_M_e = inner(r_T, q_M_f) * dx
 
     eps_h = fenics_error_estimation.estimate(a_M_e, L_M_e, N_M)
 
@@ -214,7 +209,7 @@ def estimate(w_h):
 
     eta_h = Function(V_e)
     eta = assemble(inner(inner(grad(e_h), grad(e_h)), v)
-                   * dx + inner(inner(eps_h, eps_h), v)*dx)
+                   * dx + inner(inner(eps_h, eps_h), v) * dx)
     eta_h.vector()[:] = eta
 
     return eta_h
@@ -232,8 +227,8 @@ def residual_estimate(w_h):
     n = FacetNormal(mesh)
     R_T = f + div(grad(u_h)) - grad(p_h)
     r_T = div(u_h)
-    I = Identity(2)
-    R_E = (1./2.)*jump(-p_h*I + grad(u_h), -n)
+    Id = Identity(2)
+    R_E = (1. / 2.) * jump(-p_h * Id + grad(u_h), -n)
 
     V = FunctionSpace(mesh, "DG", 0)
     v = TestFunction(V)
@@ -241,8 +236,7 @@ def residual_estimate(w_h):
 
     eta_h = Function(V)
 
-    eta = assemble(h**2*R_T**2*v*dx + r_T **
-                   2*v*dx + avg(h)*R_E**2*avg(v)*dS)
+    eta = assemble(h**2 * R_T**2 * v * dx + r_T ** 2 * v * dx + avg(h) * R_E**2 * avg(v) * dS)
     eta_h.vector()[:] = eta
 
     return eta_h
@@ -259,7 +253,7 @@ def energy_norm(u, p):
     W = FunctionSpace(mesh, 'DG', 0)
     v = TestFunction(W)
 
-    form = inner(inner(grad(u), grad(u)), v)*dx + inner(inner(p, p), v)*dx
+    form = inner(inner(grad(u), grad(u)), v) * dx + inner(inner(p, p), v) * dx
     norm_2 = assemble(form)
     return norm_2
 
