@@ -12,12 +12,16 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 import dolfinx
+from dolfinx import cpp
 from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
 from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector,
+from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, Form,
                          locate_dofs_topological, set_bc)
+from dolfinx.fem.assemble import _create_cpp_form
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
+
+import fenics_error_estimation.cpp
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
@@ -73,8 +77,43 @@ def primal():
 
     return u
 
-
 def estimate(u_h):
+    ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
+    ufl_mesh._ufl_cargo = u_h.function_space.mesh
+
+    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
+    # We need this for the local dof mapping. Not used for constructing a form.
+    element_f_cg = ufl.FiniteElement("CG", ufl.triangle, 2)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
+    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+
+    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
+    e = ufl.TrialFunction(V_f)
+    v = ufl.TestFunction(V_f)
+
+    n = ufl.FacetNormal(ufl_mesh)
+
+    x = ufl.SpatialCoordinate(ufl_mesh)
+    f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
+
+    a_e = inner(grad(e), grad(v))*dx
+    a_ufc = dolfinx.jit.ffcx_jit(a_e)
+    a_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", a_ufc), [])
+
+    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
+    u = ufl.Coefficient(V)
+
+    L_e = inner(jump(grad(u), -n), avg(v))*dS + inner(f + div((grad(u))), v)*dx
+    L_e_ufc = dolfinx.jit.ffcx_jit(L_e)
+    L_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_e_ufc), [])
+    L_dolfin.set_coefficient(0, u_h._cpp_object)
+
+    N = np.load("interpolation.npy")
+
+    fenics_error_estimation.cpp.projected_local_solver(a_dolfin, L_dolfin, N)
+
+def estimate_python(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
     dx = ufl.Measure("dx", domain=ufl_mesh)
     dS = ufl.Measure("dS", domain=ufl_mesh)
