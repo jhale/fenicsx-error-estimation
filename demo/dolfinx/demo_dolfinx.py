@@ -25,6 +25,7 @@ import fenics_error_estimation.cpp
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
+from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
 
@@ -44,12 +45,12 @@ def primal():
     dx = ufl.Measure("dx", domain=mesh)
 
     x = ufl.SpatialCoordinate(mesh)
-    f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
+    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
-    a = inner(grad(u), grad(v))*dx
-    L = inner(f, v)*dx
+    a = inner(grad(u), grad(v)) * dx
+    L = inner(f, v) * dx
 
     u0 = Function(V)
     u0.vector.set(0.0)
@@ -77,13 +78,17 @@ def primal():
 
     return u
 
+
 def estimate(u_h):
+    mesh = u_h.function_space.mesh
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
-    ufl_mesh._ufl_cargo = u_h.function_space.mesh
+    ufl_mesh._ufl_cargo = mesh
+    dx = ufl.Measure("dx", domain=ufl_mesh)
+    dS = ufl.Measure("dS", domain=ufl_mesh)
 
     element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
     # We need this for the local dof mapping. Not used for constructing a form.
-    element_f_cg = ufl.FiniteElement("CG", ufl.triangle, 2)
+    element_f_cg = change_regularity(element_f, "CG")
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
     # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
@@ -94,24 +99,63 @@ def estimate(u_h):
 
     n = ufl.FacetNormal(ufl_mesh)
 
+    # Data
     x = ufl.SpatialCoordinate(ufl_mesh)
-    f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
+    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
-    a_e = inner(grad(e), grad(v))*dx
+    # Bilinear form
+    a_e = inner(grad(e), grad(v)) * dx
     a_ufc = dolfinx.jit.ffcx_jit(a_e)
     a_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", a_ufc), [])
+    assert(a_dolfin.num_coefficients() == 0)
+    assert(len(a_e.constants()) == 0)
+    a_dolfin.set_mesh(mesh)
 
+    # Linear form
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
     u = ufl.Coefficient(V)
 
-    L_e = inner(jump(grad(u), -n), avg(v))*dS + inner(f + div((grad(u))), v)*dx
+    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
     L_e_ufc = dolfinx.jit.ffcx_jit(L_e)
     L_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_e_ufc), [])
-    L_dolfin.set_coefficient(0, u_h._cpp_object)
 
+    original_constants = [c._cpp_object for c in L_e.constants()]
+
+    assert(L_dolfin.num_coefficients() == 1)
+    L_dolfin.set_coefficient(0, u_h._cpp_object)
+    L_dolfin.set_constants(original_constants)
+    L_dolfin.set_mesh(mesh)
+
+    # Error form
+    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    V_e = FunctionSpace(mesh, element_e)
+    e_h = ufl.Coefficient(V_f)
+    v_e = ufl.TestFunction(V_e)
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+    L_eta_ufc = dolfinx.jit.ffcx_jit(L_eta)
+    L_eta_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [])
+    L_eta_dolfin.set_mesh(mesh)
+
+    # Finite element for local solves
+    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(element_f_cg)
+    element = cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
+    dof_layout = cpp.fem.create_element_dof_layout(
+        ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
+    print(dof_layout.entity_closure_dofs(1, 2))
+
+    # Interpolation operator
     N = np.load("interpolation.npy")
 
-    fenics_error_estimation.cpp.projected_local_solver(a_dolfin, L_dolfin, N)
+    # Function to store result
+    eta_h = Function(V_e)
+
+    # Boundary conditions
+    boundary_entities = locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+
+    fenics_error_estimation.cpp.projected_local_solver(
+        eta_h._cpp_object, a_dolfin, L_dolfin, L_eta_dolfin, element, dof_layout, N, boundary_entities)
+
 
 def estimate_python(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
@@ -136,15 +180,15 @@ def estimate_python(u_h):
     n = ufl.FacetNormal(ufl_mesh)
 
     x = ufl.SpatialCoordinate(ufl_mesh)
-    f = 8.0*pi**2*sin(2.0*pi*x[0])*sin(2.0*pi*x[1])
+    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
-    a_e = inner(grad(e), grad(v))*dx
-    L_e = inner(jump(grad(u), -n), avg(v))*dS + inner(f + div((grad(u))), v)*dx
+    a_e = inner(grad(e), grad(v)) * dx
+    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
 
     V_e = ufl.FunctionSpace(ufl_mesh, element_e)
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e)*dx
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     N = np.load("interpolation.npy")
 
@@ -345,14 +389,14 @@ def estimate_python(u_h):
             b_local[j] = 0.0
 
         # Project
-        A_0 = N.T@A_local@N
-        b_0 = N.T@b_local
+        A_0 = N.T @ A_local @ N
+        b_0 = N.T @ b_local
 
         # Solve
         e_0 = np.linalg.solve(A_0, b_0)
 
         # Project back
-        e_local = N@e_0
+        e_local = N @ e_0
 
         # Compute eta on cell
         eta_local.fill(0.0)
