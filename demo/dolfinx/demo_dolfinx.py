@@ -133,7 +133,7 @@ def estimate(u_h):
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
     L_eta_ufc = dolfinx.jit.ffcx_jit(L_eta)
-    L_eta_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [])
+    L_eta_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [V_e._cpp_object])
     L_eta_dolfin.set_mesh(mesh)
 
     # Finite element for local solves
@@ -155,6 +155,7 @@ def estimate(u_h):
     fenics_error_estimation.cpp.projected_local_solver(
         eta_h._cpp_object, a_dolfin, L_dolfin, L_eta_dolfin, element, dof_layout, N, boundary_entities)
 
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h.vector.array))))
 
 def estimate_python(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
@@ -410,6 +411,8 @@ def estimate_python(u_h):
         dofs = V_e_dofs.cell_dofs(i)
         eta[dofs] = eta_local
 
+    print(eta.array)
+
     with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
@@ -420,6 +423,7 @@ def estimate_python(u_h):
 def main():
     u = primal()
     estimate(u)
+    estimate_python(u)
 
 
 if __name__ == "__main__":

@@ -109,9 +109,9 @@ void projected_local_solver(
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       coordinate_dofs_macro(2 * num_dofs_g, gdim);
 
-  //const std::shared_ptr<const fem::DofMap> dofmap = L_eta.function_space(0)->dofmap();
-  // Vector for inserting final error indicator
-  //Eigen::Matrix<T, Eigen::Dynamic, 1> eta = eta_h.x()->array();
+  // dofmap and vector for inserting final error indicator
+  const std::shared_ptr<const fem::DofMap> dofmap = L_eta.function_space(0)->dofmap();
+  Eigen::Matrix<T, Eigen::Dynamic, 1> eta = eta_h.x()->array();
 
   // Iterate over active cells
   const int tdim = mesh->topology().dim();
@@ -275,14 +275,15 @@ void projected_local_solver(
     xe = N*xe_0;
 
     // Compute indicator
-    //etae.setZero();
-    //L_eta_kernel_domain_integral(etae.data(), xe.data(), L_eta_constants.data(),
-    //        coordinate_dofs.data(), nullptr, nullptr,
-    //        cell_inf[c]);
+    etae.setZero();
+    L_eta_kernel_domain_integral(etae.data(), xe.data(), L_eta_constants.data(),
+            coordinate_dofs.data(), nullptr, nullptr,
+            cell_info[c]);
+    std::cout << etae << std::endl;
 
     // Assemble.
-    //const auto dofs = dofmap->list().links(c);
-    //eta(dofs[0]) = etae(0);
+    const auto dofs = dofmap->list().links(c);
+    eta(dofs[0]) = etae(0);
   }
 }
 
