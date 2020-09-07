@@ -21,7 +21,7 @@ using namespace dolfinx;
 
 template <typename T>
 void projected_local_solver(
-    const function::Function<T>& eta_h, const fem::Form<T>& a,
+    function::Function<T>& eta_h, const fem::Form<T>& a,
     const fem::Form<T>& L, const fem::Form<T>& L_eta,
     const fem::FiniteElement& element,
     const fem::ElementDofLayout& element_dof_layout,
@@ -44,12 +44,14 @@ void projected_local_solver(
   const int element_space_dimension = element.space_dimension();
   Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae(
       element_space_dimension, element_space_dimension);
-  Eigen::Matrix<T, Eigen::Dynamic, 1> etae(1);
+  Eigen::Matrix<T, 1, 1> etae;
   Eigen::Matrix<T, Eigen::Dynamic, 1> be(element_space_dimension);
   Eigen::Matrix<T, Eigen::Dynamic, 1> b_macro(2 * element_space_dimension);
-  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae_0, be_0, xe_0, xe;
-  Eigen::FullPivLU<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                           Eigen::RowMajor>> solver;
+  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae_0, be_0,
+      xe_0, xe;
+  Eigen::FullPivLU<
+      Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+      solver;
 
   // Prepare coefficients
   const Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
@@ -69,7 +71,8 @@ void projected_local_solver(
     throw std::runtime_error("Unset constant in linear form L_eta.");
   const Eigen::Array<T, Eigen::Dynamic, 1> a_constants = fem::pack_constants(a);
   const Eigen::Array<T, Eigen::Dynamic, 1> L_constants = fem::pack_constants(L);
-  const Eigen::Array<T, Eigen::Dynamic, 1> L_eta_constants = fem::pack_constants(L_eta);
+  const Eigen::Array<T, Eigen::Dynamic, 1> L_eta_constants
+      = fem::pack_constants(L_eta);
 
   // Integrals
   const fem::FormIntegrals<T>& integrals = a.integrals();
@@ -110,8 +113,10 @@ void projected_local_solver(
       coordinate_dofs_macro(2 * num_dofs_g, gdim);
 
   // dofmap and vector for inserting final error indicator
-  const std::shared_ptr<const fem::DofMap> dofmap = L_eta.function_space(0)->dofmap();
-  Eigen::Matrix<T, Eigen::Dynamic, 1> eta = eta_h.x()->array();
+  const std::shared_ptr<const fem::DofMap> dofmap
+      = L_eta.function_space(0)->dofmap();
+  std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
+  Eigen::Matrix<T, Eigen::Dynamic, 1>& eta = eta_vec->array();
 
   // Iterate over active cells
   const int tdim = mesh->topology().dim();
@@ -256,8 +261,10 @@ void projected_local_solver(
       }
     }
 
-    for (int dof = 0; dof < element_space_dimension; ++dof) {
-      if (dofs_on_dirichlet_bc[dof] == true) {
+    for (int dof = 0; dof < element_space_dimension; ++dof)
+    {
+      if (dofs_on_dirichlet_bc[dof] == true)
+      {
         Ae.row(dof).setZero();
         Ae.col(dof).setZero();
         Ae(dof, dof) = 1.0;
@@ -266,20 +273,19 @@ void projected_local_solver(
     }
 
     // Perform projection and solve.
-    Ae_0 = N.transpose()*Ae*N;
-    be_0 = N.transpose()*be;
+    Ae_0 = N.transpose() * Ae * N;
+    be_0 = N.transpose() * be;
     solver.compute(Ae_0);
     xe_0 = solver.solve(be_0);
 
     // Project back.
-    xe = N*xe_0;
+    xe = N * xe_0;
 
     // Compute indicator
     etae.setZero();
     L_eta_kernel_domain_integral(etae.data(), xe.data(), L_eta_constants.data(),
-            coordinate_dofs.data(), nullptr, nullptr,
-            cell_info[c]);
-    std::cout << etae << std::endl;
+                                 coordinate_dofs.data(), nullptr, nullptr,
+                                 cell_info[c]);
 
     // Assemble.
     const auto dofs = dofmap->list().links(c);

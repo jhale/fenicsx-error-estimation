@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 # This is a very rough and ready version of the Bank-Weiser estimator written
-# using DOLFINX. This will be translated to either Numba or C++ in due course
-# and generalised to arbitrary problems.
+# using DOLFINX in both C++ and Python.
 
 import numpy as np
 
@@ -77,7 +76,6 @@ def primal():
         of.write_function(u)
 
     return u
-
 
 def estimate(u_h):
     mesh = u_h.function_space.mesh
@@ -155,7 +153,12 @@ def estimate(u_h):
     fenics_error_estimation.cpp.projected_local_solver(
         eta_h._cpp_object, a_dolfin, L_dolfin, L_eta_dolfin, element, dof_layout, N, boundary_entities)
 
+    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(eta_h)
+
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h.vector.array))))
+
 
 def estimate_python(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
@@ -411,9 +414,7 @@ def estimate_python(u_h):
         dofs = V_e_dofs.cell_dofs(i)
         eta[dofs] = eta_local
 
-    print(eta.array)
-
-    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+    with XDMFFile(mesh.mpi_comm(), "output/python_eta.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
 
