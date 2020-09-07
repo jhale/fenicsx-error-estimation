@@ -77,6 +77,54 @@ def primal():
 
     return u
 
+def estimate_with_wrapper(u_h):
+    from fenics_error_estimation import estimate, create_interpolation
+
+    mesh = u_h.function_space.mesh
+    ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
+    ufl_mesh._ufl_cargo = mesh
+    dx = ufl.Measure("dx", domain=ufl_mesh)
+    dS = ufl.Measure("dS", domain=ufl_mesh)
+
+    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    N = np.load("interpolation.npy")
+
+    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
+    e = ufl.TrialFunction(V_f)
+    v = ufl.TestFunction(V_f)
+
+    n = ufl.FacetNormal(ufl_mesh)
+
+    # Data
+    x = ufl.SpatialCoordinate(ufl_mesh)
+    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+
+    # Bilinear form
+    a_e = inner(grad(e), grad(v)) * dx
+
+    # Linear form
+    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
+    u = ufl.Coefficient(V)
+    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
+
+    # Error form
+    V_e = dolfinx.FunctionSpace(mesh, element_e)
+    e_h = ufl.Coefficient(V_f)
+    v_e = ufl.TestFunction(V_e)
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+
+    # Function to store result
+    eta_h = Function(V_e)
+
+    # Boundary conditions
+    boundary_entities = locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+
+    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h.vector.array))))
+
 def estimate(u_h):
     mesh = u_h.function_space.mesh
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
@@ -425,6 +473,7 @@ def main():
     u = primal()
     estimate(u)
     estimate_python(u)
+    estimate_with_wrapper(u)
 
 
 if __name__ == "__main__":

@@ -2,40 +2,50 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 
-from dolfin import *
-from dolfin.fem.assembling import _create_dolfin_form
-import fenics_error_estimation.cpp as cpp
+import cffi
 
+import dolfinx
+import dolfinx.cpp
+from ufl.algorithms.elementtransformations import change_regularity
 
-def estimate(a_e, L_e, N, bcs=[]):
+import fenics_error_estimation.cpp
+
+ffi = cffi.FFI()
+
+def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities):
     """Estimate the error using an implicit estimation strategy.
-
-    This function locally solves (on each cell) the linear finite element
-    problem projected onto the special space defined by the matrix N.  The
-    result is returned on the original finite element space.
     """
-    try:
-        len(bcs)
-    except TypeError:
-        bcs = [bcs]
+    mesh = u_h.function_space.mesh
 
-    a_e_dolfin = _create_cpp_form(a_e)
-    L_e_dolfin = _create_cpp_form(L_e)
+    a_e_ufc = dolfinx.jit.ffcx_jit(a_e)
+    a_e_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", a_e_ufc), [])
+    assert(a_e_dolfin.num_coefficients() == 0)
+    assert(len(a_e.constants()) == 0)
+    a_e_dolfin.set_mesh(mesh)
 
-    assert(a_e_dolfin.rank() == 2)
-    assert(L_e_dolfin.rank() == 1)
-    assert(N.ndim == 2)
-    assert(N.shape[0] == a_e_dolfin.function_space(0).element().space_dimension())
-    assert(N.shape[0] == a_e_dolfin.function_space(1).element().space_dimension())
-    assert(N.shape[0] == L_e_dolfin.function_space(0).element().space_dimension())
+    L_e_ufc = dolfinx.jit.ffcx_jit(L_e)
+    L_e_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", L_e_ufc), [])
 
-    V_f = FunctionSpace(L_e_dolfin.function_space(0))
-    e_V_f = Function(V_f)
+    original_constants = [c._cpp_object for c in L_e.constants()]
+    assert(L_e_dolfin.num_coefficients() == 1)
+    L_e_dolfin.set_coefficient(0, u_h._cpp_object)
+    L_e_dolfin.set_constants(original_constants)
+    L_e_dolfin.set_mesh(mesh)
 
-    cpp.projected_local_solver(e_V_f.cpp_object(), a_e_dolfin, L_e_dolfin, N, bcs)
+    L_eta_ufc = dolfinx.jit.ffcx_jit(L_eta)
+    L_eta_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [eta_h.function_space._cpp_object])
+    L_eta_dolfin.set_mesh(mesh)
 
-    return e_V_f
+    element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
+    # Finite element for local solves
+    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(element_f_cg)
+    element = dolfinx.cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
+    dof_layout = dolfinx.cpp.fem.create_element_dof_layout(
+        ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
+
+    fenics_error_estimation.cpp.projected_local_solver(
+        eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
 
 def weighted_estimate(eta_uh, eta_zh):
     pass
