@@ -78,34 +78,32 @@ def primal():
     return u
 
 def estimate_with_wrapper(u_h):
-    from fenics_error_estimation import estimate, create_interpolation
+    from fenics_error_estimation import estimate
 
     mesh = u_h.function_space.mesh
-    ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
-    ufl_mesh._ufl_cargo = mesh
-    dx = ufl.Measure("dx", domain=ufl_mesh)
-    dS = ufl.Measure("dS", domain=ufl_mesh)
+    dx = ufl.Measure("dx", domain=mesh.ufl_domain())
+    dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
     element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     N = np.load("interpolation.npy")
 
-    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
+    V_f = ufl.FunctionSpace(mesh.ufl_domain(), element_f)
     e = ufl.TrialFunction(V_f)
     v = ufl.TestFunction(V_f)
 
-    n = ufl.FacetNormal(ufl_mesh)
+    n = ufl.FacetNormal(mesh.ufl_domain())
 
     # Data
-    x = ufl.SpatialCoordinate(ufl_mesh)
+    x = ufl.SpatialCoordinate(mesh.ufl_domain())
     f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
     # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
 
     # Linear form
-    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
+    V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
     u = ufl.Coefficient(V)
     L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
 
