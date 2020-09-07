@@ -1,7 +1,10 @@
 // Copyright 2020, Jack S. Hale, Raphaël Bulle.
 // SPDX-License-Identifier: LGPL-3.0-or-later
-#include <pybind11/pybind11.h>
+#include <algorithm>
+#include <vector>
+
 #include <pybind11/eigen.h>
+#include <pybind11/pybind11.h>
 
 #include <Eigen/Dense>
 
@@ -18,7 +21,7 @@ using namespace dolfinx;
 
 template <typename T>
 void projected_local_solver(
-    const function::Function<T>& eta, const fem::Form<T>& a,
+    const function::Function<T>& eta_h, const fem::Form<T>& a,
     const fem::Form<T>& L, const fem::Form<T>& L_eta,
     const fem::FiniteElement& element,
     const fem::ElementDofLayout& element_dof_layout,
@@ -41,9 +44,12 @@ void projected_local_solver(
   const int element_space_dimension = element.space_dimension();
   Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae(
       element_space_dimension, element_space_dimension);
+  Eigen::Matrix<T, Eigen::Dynamic, 1> etae(1);
   Eigen::Matrix<T, Eigen::Dynamic, 1> be(element_space_dimension);
-  Eigen::Matrix<T, Eigen::Dynamic, 1> b_macro(2
-                                              * element_space_dimension);
+  Eigen::Matrix<T, Eigen::Dynamic, 1> b_macro(2 * element_space_dimension);
+  Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae_0, be_0, xe_0, xe;
+  Eigen::FullPivLU<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                           Eigen::RowMajor>> solver;
 
   // Prepare coefficients
   const Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
@@ -59,10 +65,11 @@ void projected_local_solver(
     throw std::runtime_error("Unset constant in bilinear form a.");
   if (!L.all_constants_set())
     throw std::runtime_error("Unset constant in linear form L.");
-  const Eigen::Array<T, Eigen::Dynamic, 1> a_constants
-      = fem::pack_constants(a);
-  const Eigen::Array<T, Eigen::Dynamic, 1> L_constants
-      = fem::pack_constants(L);
+  if (!L_eta.all_constants_set())
+    throw std::runtime_error("Unset constant in linear form L_eta.");
+  const Eigen::Array<T, Eigen::Dynamic, 1> a_constants = fem::pack_constants(a);
+  const Eigen::Array<T, Eigen::Dynamic, 1> L_constants = fem::pack_constants(L);
+  const Eigen::Array<T, Eigen::Dynamic, 1> L_eta_constants = fem::pack_constants(L_eta);
 
   // Integrals
   const fem::FormIntegrals<T>& integrals = a.integrals();
@@ -101,6 +108,10 @@ void projected_local_solver(
       coordinate_dofs(num_dofs_g, gdim);
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       coordinate_dofs_macro(2 * num_dofs_g, gdim);
+
+  //const std::shared_ptr<const fem::DofMap> dofmap = L_eta.function_space(0)->dofmap();
+  // Vector for inserting final error indicator
+  //Eigen::Matrix<T, Eigen::Dynamic, 1> eta = eta_h.x()->array();
 
   // Iterate over active cells
   const int tdim = mesh->topology().dim();
@@ -149,7 +160,8 @@ void projected_local_solver(
 
     // Loop over attached facets
     const auto c_f = c_to_f->links(c);
-    for (int local_facet = 0; local_facet < num_facets; ++local_facet) {
+    for (int local_facet = 0; local_facet < num_facets; ++local_facet)
+    {
       const std::int32_t f = c_f[local_facet];
       const auto f_c = f_to_c->links(f);
       assert(f_c.rows() < 3);
@@ -159,7 +171,7 @@ void projected_local_solver(
         // Is exterior facet
         const std::uint8_t perm = perms(local_facet, c);
         // TODO: Implement exterior facet term
-        //L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
+        // L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
         //                        L_constants.data(), coordinate_dofs.data(),
         //                        &local_facet, &perm, cell_info[c]);
       }
@@ -222,17 +234,55 @@ void projected_local_solver(
         be += b_macro.block(offset, 0, be.rows(), 1);
       }
     }
-    // Apply boundary conditions.
-    // Is one of the current cell's facets on the boundary?
-    
 
+    // Apply boundary conditions.
+    Eigen::Array<bool, Eigen::Dynamic, 1> dofs_on_dirichlet_bc(
+        element_space_dimension);
+    dofs_on_dirichlet_bc.setZero();
+    for (int local_facet = 0; local_facet < num_facets; ++local_facet)
+    {
+      const std::int32_t f = c_f[local_facet];
+      const auto* end = entities.data() + entities.size();
+      const auto* it = std::find(entities.data(), end, f);
+      if (it != end)
+      {
+        // Local facet is on Dirichlet boundary
+        const Eigen::Array<int, Eigen::Dynamic, 1> local_dofs
+            = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
+        for (int k = 0; k < local_dofs.size(); ++k)
+        {
+          dofs_on_dirichlet_bc[local_dofs[k]] = true;
+        }
+      }
+    }
+
+    for (int dof = 0; dof < element_space_dimension; ++dof) {
+      if (dofs_on_dirichlet_bc[dof] == true) {
+        Ae.row(dof).setZero();
+        Ae.col(dof).setZero();
+        Ae(dof, dof) = 1.0;
+        be(dof) = 0.0;
+      }
+    }
 
     // Perform projection and solve.
+    Ae_0 = N.transpose()*Ae*N;
+    be_0 = N.transpose()*be;
+    solver.compute(Ae_0);
+    xe_0 = solver.solve(be_0);
 
     // Project back.
+    xe = N*xe_0;
 
-    // Assemble into
+    // Compute indicator
+    //etae.setZero();
+    //L_eta_kernel_domain_integral(etae.data(), xe.data(), L_eta_constants.data(),
+    //        coordinate_dofs.data(), nullptr, nullptr,
+    //        cell_inf[c]);
 
+    // Assemble.
+    //const auto dofs = dofmap->list().links(c);
+    //eta(dofs[0]) = etae(0);
   }
 }
 

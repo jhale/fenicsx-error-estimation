@@ -141,7 +141,6 @@ def estimate(u_h):
     element = cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
     dof_layout = cpp.fem.create_element_dof_layout(
         ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
-    print(dof_layout.entity_closure_dofs(1, 2))
 
     # Interpolation operator
     N = np.load("interpolation.npy")
