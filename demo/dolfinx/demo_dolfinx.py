@@ -78,6 +78,7 @@ def primal():
 
     return u
 
+
 def estimate_with_wrapper(u_h):
     from fenics_error_estimation import estimate
 
@@ -130,6 +131,7 @@ def estimate_with_wrapper(u_h):
     with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
+
 
 def estimate(u_h):
     mesh = u_h.function_space.mesh
