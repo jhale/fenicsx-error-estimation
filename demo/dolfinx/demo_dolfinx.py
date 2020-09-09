@@ -70,6 +70,7 @@ def primal():
     solver = PETSc.KSP().create(MPI.COMM_WORLD)
     solver.setOperators(A)
     solver.solve(b, u.vector)
+    u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
     with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
         of.write_mesh(mesh)
@@ -121,7 +122,14 @@ def estimate_with_wrapper(u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h.vector.array))))
+
+    # Ghost update is not strictly necessary on DG_0 space but left anyway
+    eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
+
+    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(eta_h)
 
 def estimate(u_h):
     mesh = u_h.function_space.mesh
@@ -199,11 +207,7 @@ def estimate(u_h):
     fenics_error_estimation.cpp.projected_local_solver(
         eta_h._cpp_object, a_dolfin, L_dolfin, L_eta_dolfin, element, dof_layout, N, boundary_entities)
 
-    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(eta_h)
-
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h.vector.array))))
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
 
 def estimate_python(u_h):
@@ -460,18 +464,15 @@ def estimate_python(u_h):
         dofs = V_e_dofs.cell_dofs(i)
         eta[dofs] = eta_local
 
-    with XDMFFile(mesh.mpi_comm(), "output/python_eta.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(eta_h)
-
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta.array))))
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta.sum())))
 
 
 def main():
     u = primal()
     estimate(u)
-    estimate_python(u)
     estimate_with_wrapper(u)
+    if MPI.COMM_WORLD.size == 1:
+        estimate_python(u)
 
 
 if __name__ == "__main__":
