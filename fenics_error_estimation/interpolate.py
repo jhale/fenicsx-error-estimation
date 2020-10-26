@@ -57,7 +57,6 @@ def create_interpolation(element_f, element_g):
     V_g = FunctionSpace(mesh, element_g)
 
     V_f_dim = V_f.dim()
-
     V_g_dim = V_g.dim()
 
     assert(V_f_dim > V_g_dim)
@@ -77,16 +76,17 @@ def create_interpolation(element_f, element_g):
     G = G_2 @ G_1
 
     # Change of basis to reduce N as a diagonal with only ones and zeros
-    _, eigs, P = linalg.svd(G)
+    _, vals, V = linalg.svd(G)
 
-    assert(np.count_nonzero(np.isclose(eigs, 0.0)) == V_f_dim - V_g_dim)
-    assert(np.count_nonzero(np.logical_not(np.isclose(eigs, 0.0))) == V_g_dim)
+    eps = 1000. * np.finfo(np.float64).eps
+    assert(np.count_nonzero(np.less(vals, eps)) == V_f_dim - V_g_dim)
+    assert(np.count_nonzero(np.logical_not(np.less(vals, eps))) == V_g_dim)
 
-    null_mask = np.less(np.abs(eigs), 0.5)
-    # Reduce N to get a rectangular matrix in order to reduce the linear system
+    null_mask = np.less(np.abs(vals), eps)
+    # Reduce V to get a rectangular matrix in order to reduce the linear system
     # dimensions
-    null_space = sp.compress(null_mask, P, axis=0)
-    N_red = sp.transpose(null_space)
-    assert(not np.all(np.iscomplex(N_red)))
-    assert(np.linalg.matrix_rank(N_red) == V_f_dim - V_g_dim)
-    return N_red
+    null_space = sp.compress(null_mask, V, axis=0)
+    N = sp.transpose(null_space)
+    assert(not np.all(np.iscomplex(N)))
+    assert(np.linalg.matrix_rank(N) == V_f_dim - V_g_dim)
+    return N
