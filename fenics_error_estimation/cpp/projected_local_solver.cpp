@@ -59,44 +59,35 @@ void projected_local_solver(
   const Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       L_coeffs = pack_coefficients(L);
 
-  const std::vector<int> L_offsets = L.coefficients().offsets();
+  const std::vector<int> L_offsets = L.coefficient_offsets();
   Eigen::Array<T, Eigen::Dynamic, 1> L_coeff_array_macro(2 * L_offsets.back());
 
   // Prepare constants
-  if (!a.all_constants_set())
-    throw std::runtime_error("Unset constant in bilinear form a.");
-  if (!L.all_constants_set())
-    throw std::runtime_error("Unset constant in linear form L.");
-  if (!L_eta.all_constants_set())
-    throw std::runtime_error("Unset constant in linear form L_eta.");
   const Eigen::Array<T, Eigen::Dynamic, 1> a_constants = fem::pack_constants(a);
   const Eigen::Array<T, Eigen::Dynamic, 1> L_constants = fem::pack_constants(L);
   const Eigen::Array<T, Eigen::Dynamic, 1> L_eta_constants
       = fem::pack_constants(L_eta);
 
-  // Integrals
-  const fem::FormIntegrals<T>& integrals = a.integrals();
-  using type = fem::IntegralType;
-
   // Check assumptions on integrals.
-  assert(a.integrals().num_integrals(type::cell) == 1);
-  assert(a.integrals().num_integrals(type::interior_facet) == 0);
-  assert(a.integrals().num_integrals(type::exterior_facet) == 0);
-  assert(L.integrals().num_integrals(type::cell) == 1);
-  assert(L.integrals().num_integrals(type::interior_facet) == 1);
-  assert(L.integrals().num_integrals(type::exterior_facet) == 0);
-  assert(L_eta.integrals().num_integrals(type::cell) == 1);
-  assert(L_eta.integrals().num_integrals(type::interior_facet) == 0);
-  assert(L_eta.integrals().num_integrals(type::exterior_facet) == 0);
+  using type = fem::IntegralType;
+  assert(a.num_integrals(type::cell) == 1);
+  assert(a.num_integrals(type::interior_facet) == 0);
+  assert(a.num_integrals(type::exterior_facet) == 0);
+  assert(L.num_integrals(type::cell) == 1);
+  assert(L.num_integrals(type::interior_facet) == 1);
+  assert(L.num_integrals(type::exterior_facet) == 0);
+  assert(L.num_integrals(type::cell) == 1);
+  assert(L_eta.num_integrals(type::interior_facet) == 0);
+  assert(L_eta.num_integrals(type::exterior_facet) == 0);
 
-  const auto a_kernel_domain_integral
-      = a.integrals().get_tabulate_tensor(type::cell, 0);
-  const auto L_kernel_domain_integral
-      = L.integrals().get_tabulate_tensor(type::cell, 0);
-  const auto L_kernel_interior_facet
-      = L.integrals().get_tabulate_tensor(type::interior_facet, 0);
-  const auto L_eta_kernel_domain_integral
-      = L_eta.integrals().get_tabulate_tensor(type::cell, 0);
+  const auto& a_kernel_domain_integral
+      = a.kernel(type::cell, 0);
+  const auto& L_kernel_domain_integral
+      = L.kernel(type::cell, 0);
+  const auto& L_kernel_interior_facet
+      = L.kernel(type::interior_facet, 0);
+  const auto& L_eta_kernel_domain_integral
+      = L_eta.kernel(type::cell, 0);
 
   // Prepare cell geometry
   const int gdim = mesh->geometry().dim();
@@ -114,7 +105,7 @@ void projected_local_solver(
 
   // dofmap and vector for inserting final error indicator
   const std::shared_ptr<const fem::DofMap> dofmap
-      = L_eta.function_space(0)->dofmap();
+      = L_eta.function_spaces()[0]->dofmap();
   std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
   Eigen::Matrix<T, Eigen::Dynamic, 1>& eta = eta_vec->array();
 
