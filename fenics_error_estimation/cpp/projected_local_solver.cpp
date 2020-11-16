@@ -81,13 +81,13 @@ void projected_local_solver(
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
 
   const auto& a_kernel_domain_integral
-      = a.kernel(type::cell, 0);
+      = a.kernel(type::cell, -1);
   const auto& L_kernel_domain_integral
-      = L.kernel(type::cell, 0);
+      = L.kernel(type::cell, -1);
   const auto& L_kernel_interior_facet
-      = L.kernel(type::interior_facet, 0);
+      = L.kernel(type::interior_facet, -1);
   const auto& L_eta_kernel_domain_integral
-      = L_eta.kernel(type::cell, 0);
+      = L_eta.kernel(type::cell, -1);
 
   // Prepare cell geometry
   const int gdim = mesh->geometry().dim();
