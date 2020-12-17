@@ -7,13 +7,9 @@ Description
 
 FEniCS-EE is an open source library showing how various error estimation
 strategies can be implemented in the FEniCS Project finite element solver
-(https://fenicsproject.org). A particular focus is on implicit a posteriori
+(https://fenicsproject.org). A particular focus is on implicit hierarchical a posteriori
 error estimators, that usually involve solving local error problems in special
-finite element spaces on sub-patches of the mesh. Implicit error estimators
-usually give a significantly sharper estimate of the exact error than the more
-commonly used explicit error estimators, with very little extra computational
-expense (small matrix-matrix and matrix-vector multiplications, and linear
-solves).
+finite element spaces on cells of the mesh.
 
 FEniCS-EE is described in the paper:
 
@@ -29,24 +25,21 @@ estimation techniques for the Poisson problem:
 
 - Implicit residual estimator of Bank and Weiser,
 - Implicit residual estimator of Verfürth,
-- Recovery estimator of Zienkiewicz-Zhu,
-- Explicit residual estimator of Babuška and Rheinbolt.
 
 the following error estimation techniques for the incompressible
 elasticity problem:
 
-- Implicit residual estimator of Khan, Powell and Silvester.
+- Implicit residual estimator of Khan, Powell and Silvester (https://arxiv.org/abs/1710.03328),
 
 and the following error estimation techniques for the Stokes
 problem:
 
-- Implicit residual estimator of Liao and Silvester.
+- Implicit residual estimator of Liao and Silvester (https://doi.org/10.1016/j.apnum.2010.05.003).
 
 The following marking strategies:
 
 - Maximum (bulk),
 - Dörfler (equilibration).
-- Quasi-optimal Dörfler.
 
 Upcoming features
 =================
@@ -61,7 +54,7 @@ Getting started
    FEniCS. However, you can use any method you want to install FEniCS.
 2. Then, clone this repository using the command::
 
-        git clone https://github.org/jhale/fenics-error-estimation
+        git clone https://github.org/rbulle/fenics-error-estimation
 
 3. If you do not have an appropiate version of FEniCS already installed, use a Docker container 
    (skip the second line if you have already an appropiate version of FEniCS installed)::
@@ -83,9 +76,9 @@ Getting started
 Automated testing
 =================
 
-We use CircleCI to perform automated testing. All documented demos include
+We use github actions to perform automated testing. All documented demos include
 basic sanity checks on the results. Tests are run in the
-``jhale/fenics-error-estimation`` Docker image.
+``rbulle/fenics-error-estimation`` Docker image.
 
 FAQ
 ===
@@ -113,8 +106,7 @@ polynomial finite element spaces.
 **Question:** What will happen when FEniCSX
 https://fenicsproject.org/fenics-project-roadmap-2019/ is released?
 
-**Answer:** The core C++ routine in this package, a projected local assembler, will be
-reimplemented in Numba (http://numba.pydata.org/).
+**Answer:** There is a prototype for DOLFINX available on the branch jhale/dolfinx.
 
 **Question:** What about method x?
 
@@ -144,8 +136,6 @@ Issues and Support
 ==================
 
 Please use the issue tracker to report any issues.
-
-For support or questions please email `jack.hale@uni.lu <mailto:jack.hale@uni.lu>`_.
 
 
 Authors (alphabetical)
