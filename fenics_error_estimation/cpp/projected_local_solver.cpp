@@ -11,8 +11,8 @@
 #include <dolfinx/fem/ElementDofLayout.h>
 #include <dolfinx/fem/Form.h>
 #include <dolfinx/fem/utils.h>
-#include <dolfinx/function/Constant.h>
-#include <dolfinx/function/Function.h>
+#include <dolfinx/fem/Constant.h>
+#include <dolfinx/fem/Function.h>
 #include <dolfinx/mesh/cell_types.h>
 
 namespace py = pybind11;
@@ -21,7 +21,7 @@ using namespace dolfinx;
 
 template <typename T>
 void projected_local_solver(
-    function::Function<T>& eta_h, const fem::Form<T>& a,
+    fem::Function<T>& eta_h, const fem::Form<T>& a,
     const fem::Form<T>& L, const fem::Form<T>& L_eta,
     const fem::FiniteElement& element,
     const fem::ElementDofLayout& element_dof_layout,
@@ -63,9 +63,9 @@ void projected_local_solver(
   Eigen::Array<T, Eigen::Dynamic, 1> L_coeff_array_macro(2 * L_offsets.back());
 
   // Prepare constants
-  const Eigen::Array<T, Eigen::Dynamic, 1> a_constants = fem::pack_constants(a);
-  const Eigen::Array<T, Eigen::Dynamic, 1> L_constants = fem::pack_constants(L);
-  const Eigen::Array<T, Eigen::Dynamic, 1> L_eta_constants
+  const std::vector<double> a_constants = fem::pack_constants(a);
+  const std::vector<double> L_constants = fem::pack_constants(L);
+  const std::vector<double> L_eta_constants
       = fem::pack_constants(L_eta);
 
   // Check assumptions on integrals.
@@ -117,7 +117,7 @@ void projected_local_solver(
 
   // Needed for all integrals
   mesh->topology_mutable().create_entity_permutations();
-  const Eigen::Array<std::uint32_t, Eigen::Dynamic, 1>& cell_info
+  const std::vector<unsigned int>& cell_info
       = mesh->topology().get_cell_permutation_info();
 
   // Needed for facet integrals
@@ -160,9 +160,9 @@ void projected_local_solver(
     {
       const std::int32_t f = c_f[local_facet];
       const auto f_c = f_to_c->links(f);
-      assert(f_c.rows() < 3);
+      assert(f_c.size() < 3);
 
-      if (f_c.rows() == 1)
+      if (f_c.size() == 1)
       {
         // Is exterior facet
         const std::uint8_t perm = perms(local_facet, c);
@@ -178,7 +178,7 @@ void projected_local_solver(
         for (int k = 0; k < 2; ++k)
         {
           const auto c_f = c_to_f->links(f_c[k]);
-          const auto* end = c_f.data() + c_f.rows();
+          const auto* end = c_f.data() + c_f.size();
           const auto* it = std::find(c_f.data(), end, f);
           assert(it != end);
           local_facets[k] = std::distance(c_f.data(), it);
@@ -243,7 +243,7 @@ void projected_local_solver(
       if (it != end)
       {
         // Local facet is on Dirichlet boundary
-        const Eigen::Array<int, Eigen::Dynamic, 1> local_dofs
+        const std::vector<int> local_dofs
             = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
         for (int k = 0; k < local_dofs.size(); ++k)
         {
