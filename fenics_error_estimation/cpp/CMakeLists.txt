@@ -14,5 +14,17 @@ pybind11_add_module(cpp SHARED
     projected_local_solver.cpp
 )
 
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-Wall -Werror -pedantic" HAVE_PEDANTIC)
+if (HAVE_PEDANTIC)
+  target_compile_options(cpp PRIVATE -Wall;-Werror;-pedantic)
+endif()
+
+# In Debug mode override pybind11 symbols visibility
+# Symbols must be visible to backtrace_symbols() to produce nice logs
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_options(cpp PRIVATE "-fvisibility=default")
+endif()
+
 target_include_directories(cpp PRIVATE dolfinx petsc mpi)
 target_link_libraries(cpp PRIVATE pybind11::module dolfinx)

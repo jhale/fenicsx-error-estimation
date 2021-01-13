@@ -106,8 +106,7 @@ def estimate_with_wrapper(u_h):
 
     # Linear form
     V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
-    u = ufl.Coefficient(V)
-    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -132,11 +131,54 @@ def estimate_with_wrapper(u_h):
         of.write_mesh(mesh)
         of.write_function(eta_h)
 
+def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
+    """Create form without concrete Function Space"""
+    sd = form.subdomain_data()
+    subdomains, = list(sd.values())
+    domain, = list(sd.keys())
+    mesh = domain.ufl_cargo()
+    if mesh is None:
+        raise RuntimeError("Expecting to find a Mesh in the form.")
+
+    ufc_form = dolfinx.jit.ffcx_jit(
+        mesh.mpi_comm(),
+        form,
+        form_compiler_parameters=form_compiler_parameters,
+        jit_parameters=jit_parameters)
+
+    original_coefficients = form.coefficients()
+    
+    coeffs = []
+    for i in range(ufc_form.num_coefficients):
+        try:
+            coeffs.append(original_coefficients[ufc_form.original_coefficient_position(i)]._cpp_object)
+        except AttributeError:
+            coeffs.append(None)
+   
+    # For every argument in form extract its function space
+    function_spaces = []
+    for func in form.arguments():
+        try:
+            function_spaces.append(func.ufl_function_space()._cpp_object)
+        except AttributeError:
+            pass
+
+    subdomains = {cpp.fem.IntegralType.cell: subdomains.get("cell"),
+                  cpp.fem.IntegralType.exterior_facet: subdomains.get("exterior_facet"),
+                  cpp.fem.IntegralType.interior_facet: subdomains.get("interior_facet"),
+                  cpp.fem.IntegralType.vertex: subdomains.get("vertex")}
+
+    # Prepare dolfinx.cpp.fem.Form and hold it as a member
+    ffi = cffi.FFI()
+    form = cpp.fem.create_form(ffi.cast("uintptr_t", ufc_form),
+                               function_spaces, coeffs,
+                               [c._cpp_object for c in form.constants()], subdomains, mesh)
+
+    return form
 
 def estimate(u_h):
     mesh = u_h.function_space.mesh
-    ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
-    ufl_mesh._ufl_cargo = mesh
+    ufl_mesh = mesh.ufl_domain()
     dx = ufl.Measure("dx", domain=ufl_mesh)
     dS = ufl.Measure("dS", domain=ufl_mesh)
 
@@ -159,26 +201,14 @@ def estimate(u_h):
 
     # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
-    a_ufc = dolfinx.jit.ffcx_jit(a_e)
-    a_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", a_ufc), [])
-    assert(a_dolfin.num_coefficients() == 0)
-    assert(len(a_e.constants()) == 0)
-    a_dolfin.set_mesh(mesh)
+    a_dolfin = create_form(a_e)
 
     # Linear form
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
     u = ufl.Coefficient(V)
 
-    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
-    L_e_ufc = dolfinx.jit.ffcx_jit(L_e)
-    L_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_e_ufc), [])
-
-    original_constants = [c._cpp_object for c in L_e.constants()]
-
-    assert(L_dolfin.num_coefficients() == 1)
-    L_dolfin.set_coefficient(0, u_h._cpp_object)
-    L_dolfin.set_constants(original_constants)
-    L_dolfin.set_mesh(mesh)
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
+    L_dolfin = create_form(L_e)
 
     # Error form
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
@@ -186,12 +216,10 @@ def estimate(u_h):
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    L_eta_ufc = dolfinx.jit.ffcx_jit(L_eta)
-    L_eta_dolfin = cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [V_e._cpp_object])
-    L_eta_dolfin.set_mesh(mesh)
+    L_eta_dolfin = create_form(L_eta)
 
     # Finite element for local solves
-    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(element_f_cg)
+    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)
     element = cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
     dof_layout = cpp.fem.create_element_dof_layout(
         ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
@@ -214,6 +242,7 @@ def estimate(u_h):
 
 def estimate_python(u_h):
     ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
+    mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=ufl_mesh)
     dS = ufl.Measure("dS", domain=ufl_mesh)
 
@@ -226,8 +255,6 @@ def estimate_python(u_h):
 
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
 
-    u = ufl.Coefficient(V)
-
     V_f = ufl.FunctionSpace(ufl_mesh, element_f)
     e = ufl.TrialFunction(V_f)
     v = ufl.TestFunction(V_f)
@@ -238,7 +265,7 @@ def estimate_python(u_h):
     f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
     a_e = inner(grad(e), grad(v)) * dx
-    L_e = inner(jump(grad(u), -n), avg(v)) * dS + inner(f + div((grad(u))), v) * dx
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
 
     V_e = ufl.FunctionSpace(ufl_mesh, element_e)
     e_h = ufl.Coefficient(V_f)
@@ -247,9 +274,9 @@ def estimate_python(u_h):
 
     N = np.load("interpolation.npy")
 
-    a_form = dolfinx.jit.ffcx_jit(a_e)
-    L_form = dolfinx.jit.ffcx_jit(L_e)
-    L_eta_form = dolfinx.jit.ffcx_jit(L_eta)
+    a_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), a_e)
+    L_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
+    L_eta_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_eta)
 
     cg_dofmap = dolfinx.jit.ffcx_jit(element_f_cg)[1]
 
@@ -472,9 +499,9 @@ def estimate_python(u_h):
 def main():
     u = primal()
     estimate(u)
-    estimate_with_wrapper(u)
-    if MPI.COMM_WORLD.size == 1:
-        estimate_python(u)
+    #estimate_with_wrapper(u)
+    #if MPI.COMM_WORLD.size == 1:
+    #    estimate_python(u)
 
 
 if __name__ == "__main__":

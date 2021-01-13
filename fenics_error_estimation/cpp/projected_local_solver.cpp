@@ -165,7 +165,7 @@ void projected_local_solver(
       if (f_c.size() == 1)
       {
         // Is exterior facet
-        const std::uint8_t perm = perms(local_facet, c);
+        // const std::uint8_t perm = perms(local_facet, c);
         // TODO: Implement exterior facet term
         // L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
         //                        L_constants.data(), coordinate_dofs.data(),
@@ -245,7 +245,7 @@ void projected_local_solver(
         // Local facet is on Dirichlet boundary
         const std::vector<int> local_dofs
             = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
-        for (int k = 0; k < local_dofs.size(); ++k)
+        for (std::size_t k = 0; k < local_dofs.size(); ++k)
         {
           dofs_on_dirichlet_bc[local_dofs[k]] = true;
         }
