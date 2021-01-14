@@ -13,29 +13,62 @@ import fenics_error_estimation.cpp
 
 ffi = cffi.FFI()
 
+
+def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
+    """Create form without concrete Function Space"""
+    sd = form.subdomain_data()
+    subdomains, = list(sd.values())
+    domain, = list(sd.keys())
+    mesh = domain.ufl_cargo()
+    if mesh is None:
+        raise RuntimeError("Expecting to find a Mesh in the form.")
+
+    ufc_form = dolfinx.jit.ffcx_jit(
+        mesh.mpi_comm(),
+        form,
+        form_compiler_parameters=form_compiler_parameters,
+        jit_parameters=jit_parameters)
+
+    original_coefficients = form.coefficients()
+
+    coeffs = []
+    for i in range(ufc_form.num_coefficients):
+        try:
+            coeffs.append(original_coefficients[ufc_form.original_coefficient_position(i)]._cpp_object)
+        except AttributeError:
+            coeffs.append(None)
+
+    # For every argument in form extract its function space
+    function_spaces = []
+    for func in form.arguments():
+        try:
+            function_spaces.append(func.ufl_function_space()._cpp_object)
+        except AttributeError:
+            pass
+
+    subdomains = {dolfinx.cpp.fem.IntegralType.cell: subdomains.get("cell"),
+                  dolfinx.cpp.fem.IntegralType.exterior_facet: subdomains.get("exterior_facet"),
+                  dolfinx.cpp.fem.IntegralType.interior_facet: subdomains.get("interior_facet"),
+                  dolfinx.cpp.fem.IntegralType.vertex: subdomains.get("vertex")}
+
+    # Prepare dolfinx.cpp.fem.Form and hold it as a member
+    ffi = cffi.FFI()
+    form = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", ufc_form),
+                                       function_spaces, coeffs,
+                                       [c._cpp_object for c in form.constants()], subdomains, mesh)
+
+    return form
+
+
 def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities):
     """Estimate the error using an implicit estimation strategy.
     """
     mesh = u_h.function_space.mesh
+    mpi_comm = mesh.mpi_comm()
 
-    a_e_ufc = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, a_e)
-    a_e_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", a_e_ufc), [])
-    assert(a_e_dolfin.num_coefficients() == 0)
-    assert(len(a_e.constants()) == 0)
-    a_e_dolfin.set_mesh(mesh)
-
-    L_e_ufc = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, L_e)
-    L_e_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", L_e_ufc), [])
-
-    original_constants = [c._cpp_object for c in L_e.constants()]
-    assert(L_e_dolfin.num_coefficients() == 1)
-    L_e_dolfin.set_coefficient(0, u_h._cpp_object)
-    L_e_dolfin.set_constants(original_constants)
-    L_e_dolfin.set_mesh(mesh)
-
-    L_eta_ufc = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, L_eta)
-    L_eta_dolfin = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", L_eta_ufc), [eta_h.function_space._cpp_object])
-    L_eta_dolfin.set_mesh(mesh)
+    a_e_dolfin = create_form(a_e)
+    L_e_dolfin = create_form(L_e)
+    L_eta_dolfin = create_form(L_eta)
 
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
@@ -47,6 +80,7 @@ def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities):
 
     fenics_error_estimation.cpp.projected_local_solver(
         eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+
 
 def weighted_estimate(eta_uh, eta_zh):
     pass

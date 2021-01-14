@@ -21,6 +21,7 @@ from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
 import fenics_error_estimation.cpp
+from fenics_error_estimation import estimate
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
@@ -79,9 +80,7 @@ def primal():
     return u
 
 
-def estimate_with_wrapper(u_h):
-    from fenics_error_estimation import estimate
-
+def estimate_primal(u_h):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
@@ -131,118 +130,10 @@ def estimate_with_wrapper(u_h):
         of.write_mesh(mesh)
         of.write_function(eta_h)
 
-def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
-    """Create form without concrete Function Space"""
-    sd = form.subdomain_data()
-    subdomains, = list(sd.values())
-    domain, = list(sd.keys())
-    mesh = domain.ufl_cargo()
-    if mesh is None:
-        raise RuntimeError("Expecting to find a Mesh in the form.")
 
-    ufc_form = dolfinx.jit.ffcx_jit(
-        mesh.mpi_comm(),
-        form,
-        form_compiler_parameters=form_compiler_parameters,
-        jit_parameters=jit_parameters)
-
-    original_coefficients = form.coefficients()
-    
-    coeffs = []
-    for i in range(ufc_form.num_coefficients):
-        try:
-            coeffs.append(original_coefficients[ufc_form.original_coefficient_position(i)]._cpp_object)
-        except AttributeError:
-            coeffs.append(None)
-   
-    # For every argument in form extract its function space
-    function_spaces = []
-    for func in form.arguments():
-        try:
-            function_spaces.append(func.ufl_function_space()._cpp_object)
-        except AttributeError:
-            pass
-
-    subdomains = {cpp.fem.IntegralType.cell: subdomains.get("cell"),
-                  cpp.fem.IntegralType.exterior_facet: subdomains.get("exterior_facet"),
-                  cpp.fem.IntegralType.interior_facet: subdomains.get("interior_facet"),
-                  cpp.fem.IntegralType.vertex: subdomains.get("vertex")}
-
-    # Prepare dolfinx.cpp.fem.Form and hold it as a member
-    ffi = cffi.FFI()
-    form = cpp.fem.create_form(ffi.cast("uintptr_t", ufc_form),
-                               function_spaces, coeffs,
-                               [c._cpp_object for c in form.constants()], subdomains, mesh)
-
-    return form
-
-def estimate(u_h):
+def estimate_primal_python(u_h):
     mesh = u_h.function_space.mesh
     ufl_mesh = mesh.ufl_domain()
-    dx = ufl.Measure("dx", domain=ufl_mesh)
-    dS = ufl.Measure("dS", domain=ufl_mesh)
-
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    # We need this for the local dof mapping. Not used for constructing a form.
-    element_f_cg = change_regularity(element_f, "CG")
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
-    # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
-    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
-
-    V_f = ufl.FunctionSpace(ufl_mesh, element_f)
-    e = ufl.TrialFunction(V_f)
-    v = ufl.TestFunction(V_f)
-
-    n = ufl.FacetNormal(ufl_mesh)
-
-    # Data
-    x = ufl.SpatialCoordinate(ufl_mesh)
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-
-    # Bilinear form
-    a_e = inner(grad(e), grad(v)) * dx
-    a_dolfin = create_form(a_e)
-
-    # Linear form
-    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
-    u = ufl.Coefficient(V)
-
-    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
-    L_dolfin = create_form(L_e)
-
-    # Error form
-    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
-    V_e = FunctionSpace(mesh, element_e)
-    e_h = ufl.Coefficient(V_f)
-    v_e = ufl.TestFunction(V_e)
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    L_eta_dolfin = create_form(L_eta)
-
-    # Finite element for local solves
-    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)
-    element = cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
-    dof_layout = cpp.fem.create_element_dof_layout(
-        ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
-
-    # Interpolation operator
-    N = np.load("interpolation.npy")
-
-    # Function to store result
-    eta_h = Function(V_e)
-
-    # Boundary conditions
-    boundary_entities = locate_entities_boundary(
-        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
-
-    fenics_error_estimation.cpp.projected_local_solver(
-        eta_h._cpp_object, a_dolfin, L_dolfin, L_eta_dolfin, element, dof_layout, N, boundary_entities)
-
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
-
-
-def estimate_python(u_h):
-    ufl_mesh = ufl.Mesh(ufl.VectorElement("CG", ufl.triangle, 1))
-    mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=ufl_mesh)
     dS = ufl.Measure("dS", domain=ufl_mesh)
 
@@ -278,7 +169,7 @@ def estimate_python(u_h):
     L_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
     L_eta_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_eta)
 
-    cg_dofmap = dolfinx.jit.ffcx_jit(element_f_cg)[1]
+    cg_dofmap = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)[1]
 
     # Cell integral, no coefficients, no constants.
     a_kernel_cell = a_form.create_cell_integral(-1).tabulate_tensor
@@ -498,10 +389,9 @@ def estimate_python(u_h):
 
 def main():
     u = primal()
-    estimate(u)
-    #estimate_with_wrapper(u)
-    #if MPI.COMM_WORLD.size == 1:
-    #    estimate_python(u)
+    estimate_primal(u)
+    if MPI.COMM_WORLD.size == 1:
+        estimate_primal_python(u)
 
 
 if __name__ == "__main__":
