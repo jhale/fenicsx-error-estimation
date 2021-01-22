@@ -104,10 +104,10 @@ void projected_local_solver(
       coordinate_dofs_macro(2 * num_dofs_g, gdim);
 
   // dofmap and vector for inserting final error indicator
-  const std::shared_ptr<const fem::DofMap> dofmap
-      = L_eta.function_spaces()[0]->dofmap();
+  const graph::AdjacencyList<std::int32_t>& dofmap
+      = L_eta.function_spaces()[0]->dofmap()->list();
   std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
-  Eigen::Matrix<T, Eigen::Dynamic, 1>& eta = eta_vec->array();
+  std::vector<T>& eta = eta_vec->mutable_array();
 
   // Iterate over active cells
   const int tdim = mesh->topology().dim();
@@ -279,8 +279,8 @@ void projected_local_solver(
                                  cell_info[c]);
 
     // Assemble.
-    const auto dofs = dofmap->list().links(c);
-    eta(dofs[0]) = etae(0);
+    const auto dofs = dofmap.links(c);
+    eta[dofs[0]] = etae(0);
   }
 }
 
