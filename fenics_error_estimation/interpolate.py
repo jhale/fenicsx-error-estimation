@@ -3,8 +3,8 @@
 import numpy as np
 import scipy as sp
 from scipy import linalg
-from dolfin import *
 
+import basix
 
 def create_interpolation(element_f, element_g):
     """Construct a projection operator.
@@ -14,63 +14,19 @@ def create_interpolation(element_f, element_g):
     with L v_T = 0, where L is the Lagrangian (nodal) interpolant between V_f
     and V_g.
     """
-    gdim = element_f.cell().geometric_dimension()
+    assert element_f.cell().cellname() == element_g.cell().cellname()
+    assert element_f.family() == element_g.family() == "Lagrange"
+    assert element_f.degree() > element_g.degree()
 
-    if gdim == 1:
-        mesh = UnitIntervalMesh(MPI.comm_self, 1)
-    elif gdim == 2:
-        mesh = Mesh(MPI.comm_self)
-        editor = MeshEditor()
-        editor.open(mesh, "triangle", 2, 2)
+    basix_element_f = basix.Lagrange(element_f.cell().cellname(), element_f.degree())
+    basix_element_g = basix.Lagrange(element_g.cell().cellname(), element_g.degree())
 
-        editor.init_vertices(3)
-        editor.init_cells(1)
-
-        editor.add_vertex(0, np.array([0.0, 0.0]))
-        editor.add_vertex(1, np.array([1.0, 0.0]))
-        editor.add_vertex(2, np.array([0.0, 1.0]))
-        editor.add_cell(0, np.array([0, 1, 2], dtype=np.uintp))
-
-        editor.close()
-    elif gdim == 3:
-        mesh = Mesh(MPI.comm_self)
-        editor = MeshEditor()
-        editor.open(mesh, "tetrahedron", 3, 3)
-
-        editor.init_vertices(4)
-        editor.init_cells(1)
-
-        editor.add_vertex(0, np.array([0.0, 0.0, 0.0]))
-        editor.add_vertex(1, np.array([1.0, 0.0, 0.0]))
-        editor.add_vertex(2, np.array([0.0, 1.0, 0.0]))
-        editor.add_vertex(3, np.array([0.0, 0.0, 1.0]))
-        editor.add_cell(0, np.array([0, 1, 2, 3], dtype=np.uintp))
-
-        editor.close()
-    else:
-        raise NotImplementedError
-
-    assert(mesh.ordered())
-    assert(mesh.num_cells() == 1)
-
-    V_f = FunctionSpace(mesh, element_f)
-    V_g = FunctionSpace(mesh, element_g)
-
-    V_f_dim = V_f.dim()
-
-    V_g_dim = V_g.dim()
-
-    assert(V_f_dim > V_g_dim)
-
-    # Looks like a no-op but actually required to ensure some internal data
-    # structures are setup.
-    w = Function(V_f)  # noqa: F841
-
-    # Get interpolation matrices from fine space to coarse one and conversely
-    G_1 = PETScDMCollection.create_transfer_matrix(V_f, V_g).array()
-    G_2 = PETScDMCollection.create_transfer_matrix(V_g, V_f).array()
-    # Using "Function" prior to create_transfer_matrix, initialises PETSc for
-    # unknown reason...
+    # Interpolation element_f to element_g
+    points_g = basix_element_g.points
+    G_1 = basix_element_f.tabulate(0, points_g)[0]
+    # and from element_g to element_f
+    points_f = basix_element_f.points
+    G_2 = basix_element_g.tabulate(0, points_f)[0]
 
     # Create a square matrix for interpolation from fine space to coarse one
     # with coarse space seen as a subspace of the fine one
@@ -79,8 +35,8 @@ def create_interpolation(element_f, element_g):
     # Change of basis to reduce N as a diagonal with only ones and zeros
     _, eigs, P = linalg.svd(G)
 
-    assert(np.count_nonzero(np.isclose(eigs, 0.0)) == V_f_dim - V_g_dim)
-    assert(np.count_nonzero(np.logical_not(np.isclose(eigs, 0.0))) == V_g_dim)
+    assert(np.count_nonzero(np.isclose(eigs, 0.0)) == basix_element_f.dim - basix_element_g.dim)
+    assert(np.count_nonzero(np.logical_not(np.isclose(eigs, 0.0))) == basix_element_g.dim)
 
     null_mask = np.less(np.abs(eigs), 0.5)
     # Reduce N to get a rectangular matrix in order to reduce the linear system
@@ -88,5 +44,6 @@ def create_interpolation(element_f, element_g):
     null_space = sp.compress(null_mask, P, axis=0)
     N_red = sp.transpose(null_space)
     assert(not np.all(np.iscomplex(N_red)))
-    assert(np.linalg.matrix_rank(N_red) == V_f_dim - V_g_dim)
+    assert(np.linalg.matrix_rank(N_red) == basix_element_f.dim - basix_element_g.dim)
+    
     return N_red

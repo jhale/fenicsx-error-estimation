@@ -3,8 +3,7 @@
 import pytest
 import gc
 
-from dolfin import MPI
-
+from mpi4py import MPI
 
 def pytest_addoption(parser):
     parser.addoption('--slow', action='store_true', default=False,
@@ -34,4 +33,5 @@ def pytest_runtest_teardown(item):
     #       to temporaries and someone else does not hold a reference
     #       to 'item'?! Well, it seems that it works...
     gc.collect()
-    MPI.barrier(MPI.comm_world)
+    comm = MPI.COMM_WORLD
+    comm.Barrier()
