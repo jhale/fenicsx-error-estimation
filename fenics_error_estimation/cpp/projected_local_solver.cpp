@@ -121,7 +121,7 @@ void projected_local_solver(
       = mesh->topology().get_cell_permutation_info();
 
   // Needed for facet integrals
-  const Eigen::Array<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>& perms
+  const std::vector<std::uint8_t>& perms
       = mesh->topology().get_facet_permutations();
 
   mesh->topology_mutable().create_connectivity(tdim - 1, tdim);
@@ -185,8 +185,8 @@ void projected_local_solver(
         }
 
         // Orientation
-        const std::array perm{perms(local_facets[0], f_c[0]),
-                              perms(local_facets[1], f_c[1])};
+        const std::array perm{perms[local_facets[0], f_c[0]],
+                              perms[local_facets[1], f_c[1]]};
 
         // Get cell geometry
         const auto x_dofs0 = x_dofmap.links(f_c[0]);
