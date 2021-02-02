@@ -21,7 +21,7 @@ from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
 import fenics_error_estimation.cpp
-from fenics_error_estimation import estimate
+from fenics_error_estimation import estimate, create_interpolation
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
@@ -298,8 +298,8 @@ def estimate_primal_python(u_h):
                 local_facet[j] = index
 
             # Orientation
-            perm[0] = perms[local_facet[0], cells[0]]
-            perm[1] = perms[local_facet[1], cells[1]]
+            perm[0] = perms[cells[0] * len(facets) + local_facet[0]]
+            perm[1] = perms[cells[1] * len(facets) + local_facet[1]]
 
             # Pack geometry
             for j in range(0, 2):

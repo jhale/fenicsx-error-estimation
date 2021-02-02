@@ -1,23 +1,27 @@
-FROM quay.io/fenicsproject/dev:latest
+ARG IMAGE=fenicsproject/test-env:mpich
+FROM ${IMAGE}
 
-USER root
-WORKDIR /tmp
-ARG GMSH_VERSION=4.5.1
+ARG CMAKE_BUILD_TYPE=Debug
+ARG CXXFLAGS="-g -Wall"
+ARG PIP_EXTRA_FLAGS="--global-option --debug"
 
-RUN apt-get update && \
-    pip3 install --no-cache-dir --upgrade pytest && \
-    pip3 install --no-cache-dir --upgrade pip && \
-    apt-get install -y libxcursor-dev \
-                       libxft2 \
-                       libglu1 \
-                       libxft2 \
-                       libxinerama1 \
-                       python3-lxml && \
-    export HDF5_MPI="ON" && \
-    pip3 install --no-cache-dir --no-binary=h5py flake8 h5py meshio mpltools pandas\
-                                                 pygmsh sphinx sphinx_rtd_theme && \
-    cd /usr/local && \
-    wget -nc --quiet http://gmsh.info/bin/Linux/gmsh-${GMSH_VERSION}-Linux64.tgz && \
-    tar -xf gmsh-${GMSH_VERSION}-Linux64.tgz
+WORKDIR /src
+RUN git clone https://github.com/FEniCS/dolfinx.git && \
+    cd dolfinx && git checkout jhale/remove-function-space-check && cd ../ && \
+    git clone --depth 1 https://github.com/FEniCS/ffcx.git && \
+    git clone --depth 1 https://github.com/FEniCS/basix.git && \
+    git clone --depth 1 https://github.com/FEniCS/ufl.git
 
-ENV PATH=/usr/local/gmsh-${GMSH_VERSION}-Linux64/bin:$PATH
+RUN cd basix && python3 -m pip install . && \ 
+    cd ../ufl && python3 -m pip install . && \
+    cd ../ffcx && python3 -m pip install .
+
+ENV PETSC_DIR=/usr/local/petsc
+ENV PETSC_ARCH=linux-gnu-real-32
+RUN cd dolfinx && \
+    mkdir build && \
+    cd build && \
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_FLAGS=${CXXFLAGS} ../cpp && \
+    ninja install && \
+    cd ../python && \
+    CXXFLAGS=${CXXFLAGS} python3 -m pip -v install --global-option build ${PIP_EXTRA_FLAGS} .

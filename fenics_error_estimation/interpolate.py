@@ -15,7 +15,7 @@ def create_interpolation(element_f, element_g):
     and V_g.
     """
     assert element_f.cell().cellname() == element_g.cell().cellname()
-    assert element_f.family() == element_g.family() == "Lagrange"
+    assert element_f.family() == "Lagrange" or element_f.family() == "Discontinuous Lagrange"
     assert element_f.degree() > element_g.degree()
 
     basix_element_f = basix.Lagrange(element_f.cell().cellname(), element_f.degree())
