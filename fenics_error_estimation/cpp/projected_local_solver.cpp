@@ -1,6 +1,7 @@
 // Copyright 2020, Jack S. Hale, Raphaël Bulle.
 // SPDX-License-Identifier: LGPL-3.0-or-later
 #include <algorithm>
+#include <map>
 #include <vector>
 
 #include <pybind11/eigen.h>
@@ -8,11 +9,11 @@
 
 #include <Eigen/Dense>
 
+#include <dolfinx/fem/Constant.h>
 #include <dolfinx/fem/ElementDofLayout.h>
 #include <dolfinx/fem/Form.h>
-#include <dolfinx/fem/utils.h>
-#include <dolfinx/fem/Constant.h>
 #include <dolfinx/fem/Function.h>
+#include <dolfinx/fem/utils.h>
 #include <dolfinx/mesh/cell_types.h>
 
 namespace py = pybind11;
@@ -21,9 +22,8 @@ using namespace dolfinx;
 
 template <typename T>
 void projected_local_solver(
-    fem::Function<T>& eta_h, const fem::Form<T>& a,
-    const fem::Form<T>& L, const fem::Form<T>& L_eta,
-    const fem::FiniteElement& element,
+    fem::Function<T>& eta_h, const fem::Form<T>& a, const fem::Form<T>& L,
+    const fem::Form<T>& L_eta, const fem::FiniteElement& element,
     const fem::ElementDofLayout& element_dof_layout,
     const Eigen::Ref<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
                                          Eigen::RowMajor>>
@@ -60,13 +60,12 @@ void projected_local_solver(
       L_coeffs = pack_coefficients(L);
 
   const std::vector<int> L_offsets = L.coefficient_offsets();
-  Eigen::Array<T, Eigen::Dynamic, 1> L_coeff_array_macro(2 * L_offsets.back());
+  std::vector<T> L_coeff_array_macro(2 * L_offsets.back());
 
   // Prepare constants
   const std::vector<double> a_constants = fem::pack_constants(a);
   const std::vector<double> L_constants = fem::pack_constants(L);
-  const std::vector<double> L_eta_constants
-      = fem::pack_constants(L_eta);
+  const std::vector<double> L_eta_constants = fem::pack_constants(L_eta);
 
   // Check assumptions on integrals.
   using type = fem::IntegralType;
@@ -80,14 +79,10 @@ void projected_local_solver(
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
 
-  const auto& a_kernel_domain_integral
-      = a.kernel(type::cell, -1);
-  const auto& L_kernel_domain_integral
-      = L.kernel(type::cell, -1);
-  const auto& L_kernel_interior_facet
-      = L.kernel(type::interior_facet, -1);
-  const auto& L_eta_kernel_domain_integral
-      = L_eta.kernel(type::cell, -1);
+  const auto& a_kernel_domain_integral = a.kernel(type::cell, -1);
+  const auto& L_kernel_domain_integral = L.kernel(type::cell, -1);
+  const auto& L_kernel_interior_facet = L.kernel(type::interior_facet, -1);
+  const auto& L_eta_kernel_domain_integral = L_eta.kernel(type::cell, -1);
 
   // Prepare cell geometry
   const int gdim = mesh->geometry().dim();
@@ -98,10 +93,8 @@ void projected_local_solver(
   const int num_dofs_g = x_dofmap.num_links(0);
   const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
       = mesh->geometry().x();
-  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      coordinate_dofs(num_dofs_g, gdim);
-  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      coordinate_dofs_macro(2 * num_dofs_g, gdim);
+  std::vector<double> coordinate_dofs(num_dofs_g * gdim);
+  std::vector<double> coordinate_dofs_macro(2 * num_dofs_g * gdim);
 
   // dofmap and vector for inserting final error indicator
   const graph::AdjacencyList<std::int32_t>& dofmap
@@ -131,17 +124,25 @@ void projected_local_solver(
   assert(f_to_c);
   const auto c_to_f = mesh->topology().connectivity(tdim, tdim - 1);
   assert(c_to_f);
+  const int offset_g = gdim * num_dofs_g;
 
   const auto cell_type = mesh->topology().cell_type();
   const int num_facets = mesh::cell_num_entities(cell_type, tdim - 1);
+
+  // Hacky map for CG -> DG dof layout being different.
+  // Only works for CG2/DG2 on triangles.
+  // Once entity closure dofs is coded this should be unnecessary.
+  std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};
 
   for (int c = 0; c < num_cells; ++c)
   {
     // Get cell vertex coordinates
     auto x_dofs = x_dofmap.links(c);
     for (int i = 0; i < num_dofs_g; ++i)
-      coordinate_dofs.row(i) = x_g.row(x_dofs[i]).head(gdim);
-
+    {
+      std::copy_n(x_g.row(x_dofs[i]).data(), gdim,
+                  std::next(coordinate_dofs.begin(), i * gdim));
+    }
     Ae.setZero();
     be.setZero();
 
@@ -195,8 +196,8 @@ void projected_local_solver(
         {
           for (int l = 0; l < gdim; ++l)
           {
-            coordinate_dofs_macro(k, l) = x_g(x_dofs0[k], l);
-            coordinate_dofs_macro(k + num_dofs_g, l) = x_g(x_dofs1[k], l);
+            coordinate_dofs_macro[k * gdim + l] = x_g(x_dofs0[k], l);
+            coordinate_dofs_macro[offset_g + k * gdim + l] = x_g(x_dofs1[k], l);
           }
         }
 
@@ -210,11 +211,11 @@ void projected_local_solver(
         {
           // Loop over entries for coefficient i
           const int num_entries = L_offsets[i + 1] - L_offsets[i];
-          L_coeff_array_macro.segment(2 * L_offsets[i], num_entries)
-              = L_coeff_cell0.segment(L_offsets[i], num_entries);
-          L_coeff_array_macro.segment(L_offsets[i + 1] + L_offsets[i],
-                                      num_entries)
-              = L_coeff_cell1.segment(L_offsets[i], num_entries);
+          std::copy_n(L_coeff_cell0.data() + L_offsets[i], num_entries,
+                      std::next(L_coeff_array_macro.begin(), 2 * L_offsets[i]));
+          std::copy_n(L_coeff_cell1.data() + L_offsets[i], num_entries,
+                      std::next(L_coeff_array_macro.begin(),
+                                L_offsets[i + 1] + L_offsets[i]));
         }
 
         b_macro.setZero();
@@ -247,7 +248,7 @@ void projected_local_solver(
             = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
         for (std::size_t k = 0; k < local_dofs.size(); ++k)
         {
-          dofs_on_dirichlet_bc[local_dofs[k]] = true;
+          dofs_on_dirichlet_bc[mapping[local_dofs[k]]] = true;
         }
       }
     }

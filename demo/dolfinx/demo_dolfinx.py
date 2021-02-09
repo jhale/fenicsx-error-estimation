@@ -1,9 +1,5 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
-
-# This is a very rough and ready version of the Bank-Weiser estimator written
-# using DOLFINX in both C++ and Python.
-
 import numpy as np
 
 import cffi
@@ -14,7 +10,7 @@ import dolfinx
 from dolfinx import cpp
 from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
 from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, Form,
+from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
                          locate_dofs_topological, set_bc)
 from dolfinx.fem.assemble import _create_cpp_form
 from dolfinx.io import XDMFFile
@@ -37,7 +33,7 @@ assert dolfinx.has_petsc_complex == False
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [16, 16],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
         CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -76,6 +72,10 @@ def primal():
     with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(u)
+
+    u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    error = assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3))
+    print("True error: {}".format(np.sqrt(error)))
 
     return u
 
@@ -250,6 +250,11 @@ def estimate_primal_python(u_h):
     # Output
     eta_local = np.zeros(1, dtype=PETSc.ScalarType)
 
+    # To fix the issue with DG -> CG dof mapping change
+    def mapper(entry):
+        return mapping[entry] if entry in mapping else entry
+    mapper_vec = np.vectorize(mapper, otypes=[np.int32])
+
     for i in range(0, num_cells):
         c = x_dofs.links(i)
 
@@ -321,7 +326,7 @@ def estimate_primal_python(u_h):
                                   "double *", ffi.from_buffer(geometry_macro)),
                               ffi.cast("int *", ffi.from_buffer(local_facet)),
                               ffi.cast("uint8_t *", ffi.from_buffer(perm)),
-                              0)
+                              ffi.cast("uint32_t", cells[0]))
             # Assemble the relevant part of the macro cell tensor into the
             # local cell tensor.
             # TODO: Generalise
@@ -344,14 +349,10 @@ def estimate_primal_python(u_h):
                 "int *", entity_dofmap[1]), 1, j)
             local_dofs.append(np.copy(entity_dofmap[1]))
 
-            # Local vertices attached to facet
-            vertices = local_f_to_v[j]
-            for k in range(2):
-                cg_tabulate_entity_dofs(ffi.from_buffer(
-                    "int *", entity_dofmap[0]), 0, vertices[k])
-                local_dofs.append(np.copy(entity_dofmap[0]))
-
         local_dofs = np.unique(np.array(local_dofs).reshape(-1))
+        mapping = {3: 4, 4: 3, 5: 1}
+
+        local_dofs = mapper_vec(local_dofs)
 
         # Set Dirichlet boundary conditions on local system
         # TODO: Need to generalise to non-zero condition?
@@ -384,6 +385,9 @@ def estimate_primal_python(u_h):
         dofs = V_e_dofs.cell_dofs(i)
         eta[dofs] = eta_local
 
+    with XDMFFile(mesh.mpi_comm(), "output/eta_python.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(eta_h)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta.sum())))
 
 
