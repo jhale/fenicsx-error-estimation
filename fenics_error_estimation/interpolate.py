@@ -18,8 +18,8 @@ def create_interpolation(element_f, element_g):
     assert element_f.family() == "Lagrange" or element_f.family() == "Discontinuous Lagrange"
     assert element_f.degree() > element_g.degree()
 
-    basix_element_f = basix.Lagrange(element_f.cell().cellname(), element_f.degree())
-    basix_element_g = basix.Lagrange(element_g.cell().cellname(), element_g.degree())
+    basix_element_f = basix.create_element("Lagrange", element_f.cell().cellname(), element_f.degree())
+    basix_element_g = basix.create_element("Lagrange", element_g.cell().cellname(), element_g.degree())
 
     # Interpolation element_f to element_g
     points_g = basix_element_g.points

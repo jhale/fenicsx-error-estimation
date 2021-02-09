@@ -88,7 +88,7 @@ def estimate_primal(u_h):
     element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
-    N = np.load("interpolation.npy")
+    N = create_interpolation(element_f, element_g)
 
     V_f = ufl.FunctionSpace(mesh.ufl_domain(), element_f)
     e = ufl.TrialFunction(V_f)
@@ -163,7 +163,7 @@ def estimate_primal_python(u_h):
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
-    N = np.load("interpolation.npy")
+    N = create_interpolation(element_f, element_g)
 
     a_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), a_e)
     L_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
