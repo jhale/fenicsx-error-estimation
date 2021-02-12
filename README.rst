@@ -7,15 +7,21 @@ Description
 
 FEniCS-EE is an open source library showing how various error estimation
 strategies can be implemented in the FEniCS Project finite element solver
-(https://fenicsproject.org). A particular focus is on implicit hierarchical a posteriori
-error estimators, that usually involve solving local error problems in special
-finite element spaces on cells of the mesh.
+(https://fenicsproject.org). A particular focus is on implicit hierarchical a
+posteriori error estimators, that usually involve solving local error problems
+in special finite element spaces on cells of the mesh.
 
-FEniCS-EE is described in the paper:
+FEniCS-EE is described in the pre-print:
 
-TODO: Add pre-print of paper.
+Hierarchical a posteriori error estimation of Bank-Weiser type in the FEniCS
+Project, R. Bulle, J. S. Hale, A. Lozinski, S. P. A. Bordas, F. Chouly,
+(https://arxiv.org/abs/2102.04360).
 
-**FEniCS-EE is compatible with the 2019.2.0 development version of the FEniCS Project**.
+**FEniCS-EE is compatible with the 2019.2.0 development version of the FEniCS
+Project**.
+
+**An experimental version for DOLFINX master is available on the branch
+jhale/dolfinx**.
 
 Features
 ========
@@ -59,7 +65,6 @@ Getting started
 3. If you do not have an appropiate version of FEniCS already installed, use a Docker container 
    (skip the second line if you have already an appropiate version of FEniCS installed)::
 
-        ./build-container.sh
         ./launch-container.sh
 
 4. You should now have a shell inside a container with FEniCS installed.  Try
@@ -119,6 +124,15 @@ Citing
 Please consider citing the FEniCS-EE paper and code if you find it useful.
 
 .. code::
+
+  @misc{bulle2021hierarchical,
+      title={Hierarchical a posteriori error estimation of Bank-Weiser type in the FEniCS Project}, 
+      author={Raphaël Bulle and Jack S. Hale and Alexei Lozinski and Stéphane P. A. Bordas and Franz Chouly},
+      year={2021},
+      eprint={2102.04360},
+      archivePrefix={arXiv},
+      primaryClass={math.NA}
+  }
 
   @misc{bulle_fenics-ee_2019,
         title = {{FEniCS} {Error} {Estimation} {(FEniCS-EE)}},
