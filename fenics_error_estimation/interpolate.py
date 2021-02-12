@@ -61,6 +61,8 @@ def create_interpolation(element_f, element_g):
 
     assert(V_f_dim > V_g_dim)
 
+    # Using "Function" prior to create_transfer_matrix, initialises PETSc for
+    # unknown reason...
     # Looks like a no-op but actually required to ensure some internal data
     # structures are setup.
     w = Function(V_f)  # noqa: F841
@@ -68,8 +70,6 @@ def create_interpolation(element_f, element_g):
     # Get interpolation matrices from fine space to coarse one and conversely
     G_1 = PETScDMCollection.create_transfer_matrix(V_f, V_g).array()
     G_2 = PETScDMCollection.create_transfer_matrix(V_g, V_f).array()
-    # Using "Function" prior to create_transfer_matrix, initialises PETSc for
-    # unknown reason...
 
     # Create a square matrix for interpolation from fine space to coarse one
     # with coarse space seen as a subspace of the fine one

@@ -7,11 +7,9 @@ import fenics_error_estimation
 
 parameters["ghost_mode"] = "shared_facet"
 
-mesh = UnitSquareMesh(16, 16)
-mesh = refine(mesh, redistribute=True)
-mesh = refine(mesh, redistribute=True)
+mesh = UnitSquareMesh(256, 256)
 
-k = 3
+k = 1
 V = FunctionSpace(mesh, "CG", k)
 
 u = TrialFunction(V)
@@ -48,8 +46,7 @@ v = TestFunction(V_f)
 bc = DirichletBC(V_f, Constant(0.0), "on_boundary", "geometric")
 n = FacetNormal(mesh)
 a_e = inner(grad(e), grad(v)) * dx
-L_e = inner(f + div(grad(u_h)), v) * dx + \
-    inner(jump(grad(u_h), -n), avg(v)) * dS
+L_e = inner(f + div(grad(u_h)), v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
 e_h = fenics_error_estimation.estimate(a_e, L_e, N, bc)
 error = norm(e_h, "H10")
