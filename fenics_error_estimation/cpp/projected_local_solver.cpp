@@ -22,7 +22,7 @@ using namespace dolfinx;
 
 template <typename T>
 void projected_local_solver(
-    fem::Function<T>& eta_h, const fem::Form<T>& a, const fem::Form<T>& L,
+    fem::Function<T>& eta_h, fem::Function<T>& e_h, const fem::Form<T>& a, const fem::Form<T>& L,
     const fem::Form<T>& L_eta, const fem::FiniteElement& element,
     const fem::ElementDofLayout& element_dof_layout,
     const Eigen::Ref<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
@@ -97,11 +97,17 @@ void projected_local_solver(
   std::vector<double> coordinate_dofs_macro(2 * num_dofs_g * gdim);
 
   // dofmap and vector for inserting final error indicator
-  const graph::AdjacencyList<std::int32_t>& dofmap
-      = L_eta.function_spaces()[0]->dofmap()->list();
+  const graph::AdjacencyList<std::int32_t>& dofmap_eta
+      = eta_h.function_space()->dofmap()->list();
   std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
   std::vector<T>& eta = eta_vec->mutable_array();
 
+  // dofmap and vector for inserting error solution
+  const graph::AdjacencyList<std::int32_t>& dofmap_e
+      = e_h.function_space()->dofmap()->list();
+  std::shared_ptr<la::Vector<T>> e_vec = e_h.x();
+  std::vector<T>& e = e_vec->mutable_array();
+  
   // Iterate over active cells
   const int tdim = mesh->topology().dim();
   const auto map = mesh->topology().index_map(tdim);
@@ -280,8 +286,13 @@ void projected_local_solver(
                                  cell_info[c]);
 
     // Assemble.
-    const auto dofs = dofmap.links(c);
-    eta[dofs[0]] = etae(0);
+    const auto dofs_eta = dofmap_eta.links(c);
+    eta[dofs_eta] = etae(0);
+
+    const auto dofs_e = dofmap_e.links(c);
+    for (int i = 0; i < dofs_e.size(); ++i) {
+      e[dofs_e[i]] = xe(i);
+    } 
   }
 }
 
