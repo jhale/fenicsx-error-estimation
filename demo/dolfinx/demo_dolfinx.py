@@ -113,18 +113,26 @@ def estimate_primal(u_h):
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
-    # Function to store result
+    # Functions to store results
     eta_h = Function(V_e)
+    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+    e_h = dolfinx.Function(V_f_dolfin)
 
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
-    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
+    estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
+    
+    # Try assembling L_eta from e_h directly
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+    eta_h_2 = assemble_vector(L_eta)
+    eta_h_2.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h_2.sum())))
 
     with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)

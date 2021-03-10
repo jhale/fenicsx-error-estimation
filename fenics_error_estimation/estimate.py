@@ -60,7 +60,7 @@ def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict 
     return form
 
 
-def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities):
+def estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, bc_entities):
     """Estimate the error using an implicit estimation strategy.
     """
     mesh = u_h.function_space.mesh
@@ -79,7 +79,7 @@ def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities):
         ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
 
     fenics_error_estimation.cpp.projected_local_solver(
-        eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+        eta_h._cpp_object, e_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
 
 
 def weighted_estimate(eta_uh, eta_zh):

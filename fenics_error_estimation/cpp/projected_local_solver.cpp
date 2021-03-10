@@ -287,10 +287,10 @@ void projected_local_solver(
 
     // Assemble.
     const auto dofs_eta = dofmap_eta.links(c);
-    eta[dofs_eta] = etae(0);
+    eta[dofs_eta[0]] = etae(0);
 
     const auto dofs_e = dofmap_e.links(c);
-    for (int i = 0; i < dofs_e.size(); ++i) {
+    for (std::size_t i = 0; i < dofs_e.size(); ++i) {
       e[dofs_e[i]] = xe(i);
     } 
   }
