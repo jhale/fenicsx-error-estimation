@@ -54,9 +54,9 @@ void projected_local_solver(
       solver;
 
   // Prepare coefficients
-  const Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+  const dolfinx::array2d<double>
       a_coeffs = pack_coefficients(a);
-  const Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+  const dolfinx::array2d<double>
       L_coeffs = pack_coefficients(L);
 
   const std::vector<int> L_offsets = L.coefficient_offsets();
@@ -91,7 +91,7 @@ void projected_local_solver(
 
   // FIXME: Add proper interface for num coordinate dofs
   const int num_dofs_g = x_dofmap.num_links(0);
-  const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
+  const dolfinx::array2d<double>& x_g
       = mesh->geometry().x();
   std::vector<double> coordinate_dofs(num_dofs_g * gdim);
   std::vector<double> coordinate_dofs_macro(2 * num_dofs_g * gdim);

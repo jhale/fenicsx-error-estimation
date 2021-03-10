@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(Basix REQUIRED)
 find_package(DOLFINX REQUIRED)
 find_package(pybind11 REQUIRED CONFIG HINTS ${PYBIND11_DIR} ${PYBIND11_ROOT}
   $ENV{PYBIND11_DIR} $ENV{PYBIND11_ROOT})
@@ -26,5 +27,5 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_options(cpp PRIVATE "-fvisibility=default")
 endif()
 
-target_include_directories(cpp PRIVATE dolfinx petsc mpi)
-target_link_libraries(cpp PRIVATE pybind11::module dolfinx)
+target_include_directories(cpp PRIVATE dolfinx petsc mpi basix)
+target_link_libraries(cpp PRIVATE pybind11::module dolfinx basix)
