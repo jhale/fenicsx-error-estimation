@@ -28,4 +28,4 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 target_include_directories(cpp PRIVATE dolfinx petsc mpi basix)
-target_link_libraries(cpp PRIVATE pybind11::module dolfinx)
+target_link_libraries(cpp PRIVATE pybind11::module dolfinx basix)
