@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-project(bank_weiser)
+project(fenics_error_estimation)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,4 +28,4 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 target_include_directories(cpp PRIVATE dolfinx petsc mpi basix)
-target_link_libraries(cpp PRIVATE pybind11::module dolfinx basix)
+target_link_libraries(cpp PRIVATE pybind11::module dolfinx)
