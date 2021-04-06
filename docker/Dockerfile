@@ -12,7 +12,10 @@ RUN git clone https://github.com/FEniCS/dolfinx.git && \
     git clone --depth 1 https://github.com/FEniCS/basix.git && \
     git clone --depth 1 https://github.com/FEniCS/ufl.git
 
-RUN cd basix && python3 -m pip install . && \ 
+RUN cd basix && cmake -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -B build-dir -S . && \
+    cmake --build build-dir && \
+    cmake --install build-dir && \
+    python3 -m pip install ./python && \
     cd ../ufl && python3 -m pip install . && \
     cd ../ffcx && python3 -m pip install .
 
