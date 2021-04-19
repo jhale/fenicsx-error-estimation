@@ -9,6 +9,8 @@
 
 #include <Eigen/Dense>
 
+#include <xtensor/xtensor.hpp>
+
 #include <dolfinx/fem/Constant.h>
 #include <dolfinx/fem/ElementDofLayout.h>
 #include <dolfinx/fem/Form.h>
@@ -91,7 +93,7 @@ void projected_local_solver(
 
   // FIXME: Add proper interface for num coordinate dofs
   const int num_dofs_g = x_dofmap.num_links(0);
-  const dolfinx::array2d<double>& x_g
+  const xt::xtensor<double, 2>& x_g
       = mesh->geometry().x();
   std::vector<double> coordinate_dofs(num_dofs_g * gdim);
   std::vector<double> coordinate_dofs_macro(2 * num_dofs_g * gdim);
@@ -146,7 +148,7 @@ void projected_local_solver(
     auto x_dofs = x_dofmap.links(c);
     for (int i = 0; i < num_dofs_g; ++i)
     {
-      std::copy_n(x_g.row(x_dofs[i]).data(), gdim,
+      std::copy_n(xt::row(x_g, x_dofs[i]).begin(), gdim,
                   std::next(coordinate_dofs.begin(), i * gdim));
     }
     Ae.setZero();
