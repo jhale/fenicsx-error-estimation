@@ -70,7 +70,7 @@ class CMakeBuild(build_ext):
         cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
 
         env = os.environ.copy()
-        env['CXXFLAGS'] = '{}"'.format(env.get('CXXFLAGS', ''))
+        env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', ''))
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
