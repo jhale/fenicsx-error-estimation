@@ -6,6 +6,15 @@ ARG CXXFLAGS="-g -Wall"
 ARG PIP_EXTRA_FLAGS="--global-option --debug"
 
 WORKDIR /src
+
+RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
+    cd xtensor-python && \
+    mkdir build && \
+    cd build && \
+    cmake ../ && \
+    make install && \
+    rm -rf /src/xtensor-python
+
 RUN git clone https://github.com/FEniCS/dolfinx.git && \
     cd dolfinx && git checkout jhale/remove-function-space-check && cd ../ && \
     git clone --depth 1 https://github.com/FEniCS/ffcx.git && \

@@ -34,7 +34,7 @@ def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict 
     coeffs = []
     for i in range(ufc_form.num_coefficients):
         try:
-            coeffs.append(original_coefficients[ufc_form.original_coefficient_position(i)]._cpp_object)
+            coeffs.append(original_coefficients[ufc_form.original_coefficient_position[i]]._cpp_object)
         except AttributeError:
             coeffs.append(None)
 
@@ -53,7 +53,7 @@ def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict 
 
     # Prepare dolfinx.cpp.fem.Form and hold it as a member
     ffi = cffi.FFI()
-    form = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", ufc_form),
+    form = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", ffi.addressof(ufc_form)),
                                        function_spaces, coeffs,
                                        [c._cpp_object for c in form.constants()], subdomains, mesh)
 
@@ -74,9 +74,9 @@ def estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, bc_entities):
 
     # Finite element for local solves
     element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, element_f_cg)
-    element = dolfinx.cpp.fem.FiniteElement(ffi.cast("uintptr_t", element_ufc))
+    element = dolfinx.cpp.fem.FiniteElement(ffi.cast("uintptr_t", ffi.addressof(element_ufc)))
     dof_layout = dolfinx.cpp.fem.create_element_dof_layout(
-        ffi.cast("uintptr_t", dofmap_ufc), mesh.topology.cell_type, [])
+        ffi.cast("uintptr_t", ffi.addressof(dofmap_ufc)), mesh.topology.cell_type, [])
 
     fenics_error_estimation.cpp.projected_local_solver(
         eta_h._cpp_object, e_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)

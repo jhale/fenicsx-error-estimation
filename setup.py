@@ -9,22 +9,17 @@ import multiprocessing
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
-if sys.version_info < (3, 5):
-    print("Python 3.5 or higher required, please upgrade.")
+if sys.version_info < (3, 7):
+    print("Python 3.7 or higher required, please upgrade.")
     sys.exit(1)
-
-on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 VERSION = "2019.2.0.dev0"
 URL = ""
 
-if on_rtd:
-    REQUIREMENTS = []
-else:
-    REQUIREMENTS = [
-        "numpy",
-        "fenics-ffcx>=2019.2.0.dev0",
-    ]
+REQUIREMENTS = [
+    "numpy",
+    "fenics-ffcx>=2019.2.0.dev0",
+]
 
 AUTHORS = """\
 Raphael Bulle
@@ -39,11 +34,10 @@ License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3
 Operating System :: POSIX
 Operating System :: POSIX :: Linux
 Operating System :: MacOS :: MacOS X
-Operating System :: Microsoft :: Windows
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.5
-Programming Language :: Python :: 3.6
+Programming Language :: Python :: 3.7
+Programming Language :: Python :: 3.8
 Topic :: Scientific/Engineering :: Mathematics
 """
 
@@ -74,11 +68,10 @@ class CMakeBuild(build_ext):
         build_args = ['--config', cfg]
 
         cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-        build_args += ['--', '-j3']
 
         env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get('CXXFLAGS', ''),
-                                                              self.distribution.get_version())
+        env['CXXFLAGS'] = '{}"'.format(env.get('CXXFLAGS', ''))
+
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
@@ -99,7 +92,7 @@ def run_install():
           package_dir={"fenics_error_estimation": "fenics_error_estimation"},
           ext_modules=[CMakeExtension("fenics_error_estimation.cpp", sourcedir="./fenics_error_estimation/cpp/")],
           cmdclass=dict(build_ext=CMakeBuild),
-          platforms=["Linux", "Solaris", "Mac OS-X", "Unix"],
+          platforms=["Linux", "Mac OS-X", "Unix"],
           install_requires=REQUIREMENTS,
           zip_safe=False)
 

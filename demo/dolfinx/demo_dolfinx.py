@@ -33,7 +33,7 @@ assert dolfinx.has_petsc_complex == False
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
         CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -127,7 +127,7 @@ def estimate_primal(u_h):
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
-    
+
     # Try assembling L_eta from e_h directly
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
     eta_h_2 = assemble_vector(L_eta)
@@ -180,16 +180,15 @@ def estimate_primal_python(u_h):
     cg_dofmap = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)[1]
 
     # Cell integral, no coefficients, no constants.
-    a_kernel_cell = a_form.create_cell_integral(-1).tabulate_tensor
+    a_kernel_cell = a_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
 
     # Cell integral, one coefficient (CG1), no constants.
-    L_kernel_cell = L_form.create_cell_integral(-1).tabulate_tensor
+    L_kernel_cell = L_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
     # Interior facet integral, one coefficient, no constant.
-    L_kernel_interior = L_form.create_interior_facet_integral(
-        -1).tabulate_tensor
+    L_kernel_interior = L_form.integrals(dolfinx.fem.IntegralType.interior_facet)[0].tabulate_tensor
 
     # Cell integral, one coefficient (DG2), no constants.
-    L_eta_kernel_cell = L_eta_form.create_cell_integral(-1).tabulate_tensor
+    L_eta_kernel_cell = L_eta_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
 
     # Construct local entity dof map
     cg_tabulate_entity_dofs = cg_dofmap.tabulate_entity_dofs
