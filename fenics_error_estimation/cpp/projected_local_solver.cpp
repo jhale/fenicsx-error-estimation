@@ -9,7 +9,7 @@
 
 #include <pybind11/pybind11.h>
 #define FORCE_IMPORT_ARRAY
-#include <xtensor-python/pyarray.hpp>
+#include <xtensor-python/pytensor.hpp>
 
 #include <dolfinx/fem/Constant.h>
 #include <dolfinx/fem/ElementDofLayout.h>
@@ -28,8 +28,8 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
                             const fem::Form<T>& L_eta,
                             const fem::FiniteElement& element,
                             const fem::ElementDofLayout& element_dof_layout,
-                            const xt::pyarray<T>& N,
-                            const xt::pyarray<std::int32_t>& entities)
+                            const xt::pytensor<T, 2>& N,
+                            const xt::pytensor<std::int32_t, 1>& entities)
 {
   const auto mesh = a.mesh();
   assert(mesh == L.mesh());
