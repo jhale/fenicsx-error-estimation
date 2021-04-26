@@ -14,7 +14,7 @@ import fenics_error_estimation.cpp
 ffi = cffi.FFI()
 
 
-def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
+def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
     """Create form without concrete Function Space"""
     sd = form.subdomain_data()
     subdomains, = list(sd.values())
@@ -60,15 +60,15 @@ def create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict 
     return form
 
 
-def estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, bc_entities):
-    """Estimate the error using an implicit estimation strategy.
+def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
+    """Estimate the error using the Bank-Weiser implicit estimation strategy.
     """
     mesh = u_h.function_space.mesh
     mpi_comm = mesh.mpi_comm()
 
-    a_e_dolfin = create_form(a_e)
-    L_e_dolfin = create_form(L_e)
-    L_eta_dolfin = create_form(L_eta)
+    a_e_dolfin = _create_form(a_e)
+    L_e_dolfin = _create_form(L_e)
+    L_eta_dolfin = _create_form(L_eta)
 
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
@@ -78,8 +78,13 @@ def estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, bc_entities):
     dof_layout = dolfinx.cpp.fem.create_element_dof_layout(
         ffi.cast("uintptr_t", ffi.addressof(dofmap_ufc)), mesh.topology.cell_type, [])
 
-    fenics_error_estimation.cpp.projected_local_solver(
-        eta_h._cpp_object, e_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+    if e_h is None:
+        # This version of the function does not modify the second argument.
+        fenics_error_estimation.cpp.projected_local_solver_no_error_solution(
+            eta_h._cpp_object, eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+    else:
+        fenics_error_estimation.cpp.projected_local_solver_error_solution(
+            eta_h._cpp_object, e_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
 
 
 def weighted_estimate(eta_uh, eta_zh):

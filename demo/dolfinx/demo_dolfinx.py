@@ -122,7 +122,7 @@ def estimate_primal(u_h):
     boundary_entities = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
-    estimate(eta_h, e_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
+    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)

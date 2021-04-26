@@ -22,7 +22,8 @@ namespace py = pybind11;
 
 using namespace dolfinx;
 
-template <typename T>
+// S turns on or off assembly of the Bank-Weiser solution at compile time.
+template <typename T, bool S = false>
 void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
                             const fem::Form<T>& a, const fem::Form<T>& L,
                             const fem::Form<T>& L_eta,
@@ -39,10 +40,8 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const int element_space_dimension = element.space_dimension();
   xt::xtensor<T, 2> Ae
       = xt::zeros<T>({element_space_dimension, element_space_dimension});
-  ;
   xt::xtensor_fixed<T, xt::xshape<1>> etae = xt::zeros<double>({1});
   xt::xtensor<T, 1> be = xt::zeros<double>({element_space_dimension});
-  ;
   xt::xtensor<T, 1> b_macro = xt::zeros<double>({2 * element_space_dimension});
   xt::xtensor<T, 2> Ae_0;
   xt::xtensor<T, 1> be_0, xe_0, xe;
@@ -279,10 +278,13 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     const auto dofs_eta = dofmap_eta.links(c);
     eta[dofs_eta[0]] = etae(0);
 
-    const auto dofs_e = dofmap_e.links(c);
-    for (std::size_t i = 0; i < dofs_e.size(); ++i)
+    if constexpr (S)
     {
-      e[dofs_e[i]] = xe(i);
+      const auto dofs_e = dofmap_e.links(c);
+      for (std::size_t i = 0; i < dofs_e.size(); ++i)
+      {
+        e[dofs_e[i]] = xe(i);
+      }
     }
   }
 }
@@ -290,6 +292,12 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 PYBIND11_MODULE(cpp, m)
 {
   xt::import_numpy();
-  m.def("projected_local_solver", &projected_local_solver<PetscScalar>,
-        "Local solves on projected finite element space");
+  m.def("projected_local_solver_error_solution",
+        &projected_local_solver<PetscScalar, true>,
+        "Local solves on projected finite element space. Computes Bank-Weiser "
+        "error solution.")
+      .def("projected_local_solver_no_error_solution",
+           &projected_local_solver<PetscScalar, false>,
+           "Local solves on projected finite element space. Does not compute "
+           "Bank-Weiser error solution.");
 }
