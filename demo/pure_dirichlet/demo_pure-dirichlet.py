@@ -28,7 +28,7 @@ assert dolfinx.has_petsc_complex == False
 
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [512, 512],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
     CellType.triangle)
 
 element = ufl.FiniteElement("CG", ufl.triangle, 1)

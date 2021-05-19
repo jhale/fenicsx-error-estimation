@@ -65,7 +65,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   assert(a.num_integrals(type::exterior_facet) == 0);
   assert(L.num_integrals(type::cell) == 1);
   assert(L.num_integrals(type::interior_facet) == 1);
-  assert(L.num_integrals(type::exterior_facet) == 0);
+  assert(L.num_integrals(type::exterior_facet) == 1);
   assert(L.num_integrals(type::cell) == 1);
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
@@ -73,6 +73,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const auto& a_kernel_domain_integral = a.kernel(type::cell, -1);
   const auto& L_kernel_domain_integral = L.kernel(type::cell, -1);
   const auto& L_kernel_interior_facet = L.kernel(type::interior_facet, -1);
+  const auto& L_kernel_exterior_facet = L.kernel(type::exterior_facet, -1);
   const auto& L_eta_kernel_domain_integral = L_eta.kernel(type::cell, -1);
 
   // Prepare cell geometry
@@ -162,11 +163,11 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
       if (f_c.size() == 1)
       {
         // Is exterior facet
-        // const std::uint8_t perm = perms(local_facet, c);
-        // TODO: Implement exterior facet term
-        // L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
-        //                        L_constants.data(), coordinate_dofs.data(),
-        //                        &local_facet, &perm, cell_info[c]);
+        const std::uint8_t perm = perms[local_facet*c];
+        // Exterior facet term
+        L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
+                                L_constants.data(), coordinate_dofs.data(),
+                                &local_facet, &perm, cell_info[c]);
       }
       else
       {
