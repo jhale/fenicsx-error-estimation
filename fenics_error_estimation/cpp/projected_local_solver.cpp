@@ -22,8 +22,7 @@ namespace py = pybind11;
 
 using namespace dolfinx;
 
-// S turns on or off assembly of the Bank-Weiser solution at compile time.
-template <typename T, bool S = false>
+template <typename T, bool compute_error_solution = false>
 void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
                             const fem::Form<T>& a, const fem::Form<T>& L,
                             const fem::Form<T>& L_eta,
@@ -65,15 +64,24 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   assert(a.num_integrals(type::exterior_facet) == 0);
   assert(L.num_integrals(type::cell) == 1);
   assert(L.num_integrals(type::interior_facet) == 1);
-  assert(L.num_integrals(type::exterior_facet) == 1);
   assert(L.num_integrals(type::cell) == 1);
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
 
   const auto& a_kernel_domain_integral = a.kernel(type::cell, -1);
   const auto& L_kernel_domain_integral = L.kernel(type::cell, -1);
+  std::function<void(T*, const T*, const T*, const double*, const int*,
+                     const std::uint8_t*, const std::uint32_t)>
+      L_kernel_exterior_facet;
+  if (L.num_integrals(type::exterior_facet) == 1)
+  {
+    L_kernel_exterior_facet = L.kernel(type::exterior_facet, -1);
+  }
+  else
+  {
+    L_kernel_exterior_facet = nullptr;
+  }
   const auto& L_kernel_interior_facet = L.kernel(type::interior_facet, -1);
-  const auto& L_kernel_exterior_facet = L.kernel(type::exterior_facet, -1);
   const auto& L_eta_kernel_domain_integral = L_eta.kernel(type::cell, -1);
 
   // Prepare cell geometry
@@ -162,12 +170,15 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 
       if (f_c.size() == 1)
       {
-        // Is exterior facet
-        const std::uint8_t perm = perms[local_facet*c];
-        // Exterior facet term
-        L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
-                                L_constants.data(), coordinate_dofs.data(),
-                                &local_facet, &perm, cell_info[c]);
+        if (L.num_integrals(type::exterior_facet) == 1)
+        {
+          // Is exterior facet
+          const std::uint8_t perm = perms[c * c_f.size() + local_facet];
+          // Exterior facet term
+          L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
+                                  L_constants.data(), coordinate_dofs.data(),
+                                  &local_facet, &perm, cell_info[c]);
+        }
       }
       else
       {
@@ -183,8 +194,8 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
         }
 
         // Orientation
-        const std::array perm{perms[local_facets[0], f_c[0]],
-                              perms[local_facets[1], f_c[1]]};
+        const std::array perm{perms[f_c[0] * c_f.size() + local_facets[0]],
+                              perms[f_c[1] * c_f.size() + local_facets[1]]};
 
         // Get cell geometry
         const auto x_dofs0 = x_dofmap.links(f_c[0]);
@@ -279,7 +290,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     const auto dofs_eta = dofmap_eta.links(c);
     eta[dofs_eta[0]] = etae(0);
 
-    if constexpr (S)
+    if constexpr (compute_error_solution)
     {
       const auto dofs_e = dofmap_e.links(c);
       for (std::size_t i = 0; i < dofs_e.size(); ++i)

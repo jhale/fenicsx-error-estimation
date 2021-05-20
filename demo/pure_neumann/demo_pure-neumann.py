@@ -22,13 +22,13 @@ from ufl.algorithms.elementtransformations import change_regularity
 
 assert dolfinx.has_petsc_complex == False
 
-# The first part of this script is completely standard. We solve a Poisson
-# problem on a square mesh with known data and homogeneous Dirichlet boundary
-# conditions.
+# The first part of this script is completely standard. We solve a screened
+# Poisson problem on a square mesh with known data and homogeneous Neumann
+# boundary conditions.
 
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
     CellType.triangle)
 
 element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -36,12 +36,12 @@ V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
 
 x = ufl.SpatialCoordinate(mesh)
-f = (2.0*(2.0*pi)**2 + 1.0)*sin(2.0*pi*x[0] - 0.5*pi)*sin(2*pi*x[1] - 0.5*pi)
+f = (2.0 * (2.0 * pi)**2 + 1.0) * sin(2.0 * pi * x[0] - 0.5 * pi) * sin(2 * pi * x[1] - 0.5 * pi)
 g = dolfinx.Constant(mesh, 0.0)
 
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
-a = inner(grad(u), grad(v)) * dx
+a = inner(grad(u), grad(v)) * dx + inner(u, v) * dx
 L = inner(f, v) * dx
 
 A = assemble_matrix(a)
@@ -59,8 +59,9 @@ with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
     of.write_mesh(mesh)
     of.write_function(u_h)
 
-u_exact = sin(2.0 * pi * x[0] - 0.5*pi) * sin(2.0 * pi * x[1] - 0.5*pi)
-error = MPI.COMM_WORLD.allreduce(assemble_scalar(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=3)), op=MPI.SUM)
+u_exact = sin(2.0 * pi * x[0] - 0.5 * pi) * sin(2.0 * pi * x[1] - 0.5 * pi)
+error = MPI.COMM_WORLD.allreduce(assemble_scalar(
+    inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=3)), op=MPI.SUM)
 print("True error: {}".format(np.sqrt(error)))
 
 # Now we specify the Bank-Weiser error estimation problem.
@@ -83,7 +84,8 @@ a_e = inner(grad(e), grad(v)) * dx
 n = ufl.FacetNormal(mesh)
 dS = ufl.Measure("dS", domain=mesh)
 ds = ufl.Measure("ds", domain=mesh)
-L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx + inner(g - dot(grad(u_h), n), v)*ds
+L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * \
+    dx + inner(g - dot(grad(u_h), n), v) * ds
 
 # Error form
 # Note that e_h is a ufl.Coefficient, not a dolfinx.Function. Inside the
@@ -97,7 +99,8 @@ L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 eta_h = Function(V_e)
 
 # Estimate the error using the Bank-Weiser approach.
-# As the original problem has no Dirichlet conditions, 
+# As we are solving a Neumann problem we pass an empty list of facet ids so
+# that no Dirichlet conditions are applied to the local Bank-Weiser problems.
 facets = np.array([], dtype=np.int32)
 fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets)
 
