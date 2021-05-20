@@ -13,12 +13,12 @@ if sys.version_info < (3, 7):
     print("Python 3.7 or higher required, please upgrade.")
     sys.exit(1)
 
-VERSION = "2019.2.0.dev0"
+VERSION = "0.1.0"
 URL = ""
 
 REQUIREMENTS = [
     "numpy",
-    "fenics-ffcx>=2019.2.0.dev0",
+    "fenics-dolfinx>=0.1.0",
 ]
 
 AUTHORS = """\
