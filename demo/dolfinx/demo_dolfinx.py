@@ -250,8 +250,6 @@ def estimate_primal_python(u_h):
     tdim = mesh.topology.dim
     f_to_c = mesh.topology.connectivity(tdim - 1, tdim)
     c_to_f = mesh.topology.connectivity(tdim, tdim - 1)
-    # TODO: Check this is the right convention.
-    local_f_to_v = {0: [1, 2], 1: [0, 2], 2: [0, 1]}
 
     # Final error estimator calculation
     # Output
