@@ -12,7 +12,7 @@ from ufl import avg, div, grad, inner, jump
 import fenics_error_estimation.estimate
 from fenics_error_estimation import create_interpolation
 
-k=1
+k = 1
 
 
 def main():
@@ -25,9 +25,9 @@ def main():
         result = np.zeros(5)
 
         def u_exact(x):
-            r = np.sqrt(x[0]*x[0] + x[1]*x[1])
-            theta = np.arctan2(x[1], x[0]) + np.pi/2.
-            values = r**(2./3.)*np.sin((2./3.)*theta)
+            r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+            theta = np.arctan2(x[1], x[0]) + np.pi / 2.
+            values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
             return values
 
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
@@ -70,7 +70,8 @@ def main():
             fo.write_function(eta_exact)
 
         # Necessary for parallel operation
-        h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
+        h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
+            0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
         h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
         result[1] = h_global[0]
         h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
@@ -83,7 +84,7 @@ def main():
         theta = 0.3
 
         eta_global = sum(eta_h.vector.array)
-        cutoff = theta*eta_global
+        cutoff = theta * eta_global
 
         sorted_cells = np.argsort(eta_h.vector.array)[::-1]
         rolling_sum = 0.0
@@ -92,8 +93,9 @@ def main():
             if rolling_sum > cutoff:
                 breakpoint = i
                 break
-
-        refine_cells = sorted_cells[0:breakpoint]
+        
+        print(breakpoint)
+        refine_cells = sorted_cells[0:breakpoint + 1]
         indices = np.array(np.sort(refine_cells), dtype=np.int32)
         markers = np.zeros(indices.shape, dtype=np.int8)
         markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
@@ -109,6 +111,7 @@ def main():
         print(results)
     np.save('output/results.npy', results)
 
+
 def solve(V, u_exact_V):
     mesh = V.mesh
     dx = ufl.Measure("dx", domain=mesh)
@@ -116,24 +119,19 @@ def solve(V, u_exact_V):
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
 
-    f = dolfinx.Function(V) # Zero data
+    f = dolfinx.Function(V)  # Zero data
 
     a = inner(grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
     facets = dolfinx.mesh.locate_entities_boundary(
-            mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
     bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
-    
+
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
-    A_mat = np.zeros((len(u_exact_V.vector.array), len(u_exact_V.vector.array)))
-    for i in range(len(u_exact_V.vector.array)):
-        for j in range(len(u_exact_V.vector.array)):
-            A_mat[i, j] = A.getValues(i,j)
-
-    print('A =', A_mat)
+    print(A.convert('dense').getDenseArray())
 
     b = dolfinx.fem.assemble_vector(L)
     dolfinx.fem.apply_lifting(b, [a], [bcs])
@@ -159,6 +157,7 @@ def solve(V, u_exact_V):
     print('u_h =', u_h.vector.array)
     return u_h
 
+
 def estimate(u_h):
     mesh = u_h.function_space.mesh
     ufl_domain = mesh.ufl_domain()
@@ -179,10 +178,10 @@ def estimate(u_h):
 
     # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
-    
+
     # Linear form
     V = u_h.function_space
-    f = dolfinx.Function(V) # Zero data
+    f = dolfinx.Function(V)  # Zero data
     r = f + div(grad(u_h))
     L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
@@ -201,13 +200,13 @@ def estimate(u_h):
 
     # Boundary conditions
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
-            mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     fenics_error_estimation.estimate(
-            eta_h, e_h_f, u_h, a_e, L_e, L_eta, N, boundary_entities)
+        eta_h, e_h_f, u_h, a_e, L_e, L_eta, N, boundary_entities)
 
     return eta_h, e_h_f
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
