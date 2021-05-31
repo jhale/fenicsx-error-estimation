@@ -203,7 +203,7 @@ def estimate(u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     fenics_error_estimation.estimate(
-        eta_h, e_h_f, u_h, a_e, L_e, L_eta, N, boundary_entities)
+        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
 
     return eta_h, e_h_f
 
