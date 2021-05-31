@@ -36,7 +36,6 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/u_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_exact_V)
-        print("u_exact =", u_exact_V.vector[:])
 
         # Solve
         print('Solving...')
@@ -48,7 +47,6 @@ def main():
         # Estimate
         print("Estimating...")
         eta_h, e_h = estimate(u_h)
-        print('eta_h.vector.array = ', eta_h.vector.array)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_hu_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_h)
@@ -94,7 +92,6 @@ def main():
                 breakpoint = i
                 break
         
-        print(breakpoint)
         refine_cells = sorted_cells[0:breakpoint + 1]
         indices = np.array(np.sort(refine_cells), dtype=np.int32)
         markers = np.zeros(indices.shape, dtype=np.int8)
@@ -105,10 +102,11 @@ def main():
         mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
 
         with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
-            fo.write(mesh)
+            fo.write_mesh(mesh)
 
-        results = np.concatenate((results, result))
-        print(results)
+        #results = np.concatenate((results, result))
+        #print(results)
+    
     np.save('output/results.npy', results)
 
 
@@ -131,14 +129,12 @@ def solve(V, u_exact_V):
 
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
-    print(A.convert('dense').getDenseArray())
 
     b = dolfinx.fem.assemble_vector(L)
     dolfinx.fem.apply_lifting(b, [a], [bcs])
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
     dolfinx.fem.set_bc(b, bcs)
 
-    print('b =', b.array)
     options = PETSc.Options()
     options["ksp_type"] = "cg"
     options["ksp_view"] = None
@@ -154,7 +150,6 @@ def solve(V, u_exact_V):
     solver.solve(b, u_h.vector)
     u_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                            mode=PETSc.ScatterMode.FORWARD)
-    print('u_h =', u_h.vector.array)
     return u_h
 
 
