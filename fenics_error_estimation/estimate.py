@@ -60,7 +60,7 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
     return form
 
 
-def estimate(eta_h, e_h_f, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
+def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
     """Estimate the error using the Bank-Weiser implicit estimation strategy.
     """
     mesh = u_h.function_space.mesh
