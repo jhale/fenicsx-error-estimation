@@ -85,15 +85,14 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const auto& L_eta_kernel_domain_integral = L_eta.kernel(type::cell, -1);
 
   // Prepare cell geometry
-  const int gdim = mesh->geometry().dim();
   const graph::AdjacencyList<std::int32_t>& x_dofmap
       = mesh->geometry().dofmap();
 
   // FIXME: Add proper interface for num coordinate dofs
-  const int num_dofs_g = x_dofmap.num_links(0);
+  const std::size_t num_dofs_g = x_dofmap.num_links(0);
   const xt::xtensor<double, 2>& x_g = mesh->geometry().x();
-  std::vector<double> coordinate_dofs(num_dofs_g * gdim);
-  std::vector<double> coordinate_dofs_macro(2 * num_dofs_g * gdim);
+  std::vector<double> coordinate_dofs(num_dofs_g * 3);
+  xt::xtensor<double, 3> coordinate_dofs_macro({2, num_dofs_g, 3});
 
   // dofmap and vector for inserting final error indicator
   const graph::AdjacencyList<std::int32_t>& dofmap_eta
@@ -129,7 +128,6 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   assert(f_to_c);
   const auto c_to_f = mesh->topology().connectivity(tdim, tdim - 1);
   assert(c_to_f);
-  const int offset_g = gdim * num_dofs_g;
 
   const auto cell_type = mesh->topology().cell_type();
   const int num_facets = mesh::cell_num_entities(cell_type, tdim - 1);
@@ -143,10 +141,10 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   {
     // Get cell vertex coordinates
     auto x_dofs = x_dofmap.links(c);
-    for (int i = 0; i < num_dofs_g; ++i)
+    for (std::size_t i = 0; i < x_dofs.size(); ++i)
     {
-      std::copy_n(xt::row(x_g, x_dofs[i]).begin(), gdim,
-                  std::next(coordinate_dofs.begin(), i * gdim));
+      std::copy_n(xt::row(x_g, x_dofs[i]).begin(), 3,
+                  std::next(coordinate_dofs.begin(), i * 3));
     }
     std::fill(Ae.begin(), Ae.end(), 0.0);
     std::fill(be.begin(), be.end(), 0.0);
@@ -198,15 +196,17 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
                               perms[f_c[1] * c_f.size() + local_facets[1]]};
 
         // Get cell geometry
-        const auto x_dofs0 = x_dofmap.links(f_c[0]);
-        const auto x_dofs1 = x_dofmap.links(f_c[1]);
-        for (int k = 0; k < num_dofs_g; ++k)
+        auto x_dofs0 = x_dofmap.links(f_c[0]);
+        for (std::size_t i = 0; i < x_dofs0.size(); ++i)
         {
-          for (int l = 0; l < gdim; ++l)
-          {
-            coordinate_dofs_macro[k * gdim + l] = x_g(x_dofs0[k], l);
-            coordinate_dofs_macro[offset_g + k * gdim + l] = x_g(x_dofs1[k], l);
-          }
+          std::copy_n(xt::view(x_g, x_dofs0[i]).begin(), 3,
+                      xt::view(coordinate_dofs_macro, 0, i, xt::all()).begin());
+        }
+        auto x_dofs1 = x_dofmap.links(f_c[1]);
+        for (std::size_t i = 0; i < x_dofs1.size(); ++i)
+        {
+          std::copy_n(xt::view(x_g, x_dofs1[i]).begin(), 3,
+                      xt::view(coordinate_dofs_macro, 1, i, xt::all()).begin());
         }
 
         // Layout for the restricted coefficients is flattened

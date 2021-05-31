@@ -27,7 +27,7 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
         mesh.mpi_comm(),
         form,
         form_compiler_parameters=form_compiler_parameters,
-        jit_parameters=jit_parameters)
+        jit_parameters=jit_parameters)[0]
 
     original_coefficients = form.coefficients()
 
@@ -73,10 +73,13 @@ def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
     # Finite element for local solves
-    element_ufc, dofmap_ufc = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, element_f_cg)
-    element = dolfinx.cpp.fem.FiniteElement(ffi.cast("uintptr_t", ffi.addressof(element_ufc)))
+    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, element_f_cg)
+    cg_element = cg_element_and_dofmap[0]
+    cg_dofmap = cg_element_and_dofmap[1]
+
+    element = dolfinx.cpp.fem.FiniteElement(ffi.cast("uintptr_t", ffi.addressof(cg_element)))
     dof_layout = dolfinx.cpp.fem.create_element_dof_layout(
-        ffi.cast("uintptr_t", ffi.addressof(dofmap_ufc)), mesh.topology.cell_type, [])
+        ffi.cast("uintptr_t", ffi.addressof(cg_dofmap)), mesh.topology.cell_type, [])
 
     if e_h is None:
         # This version of the function does not modify the second argument.

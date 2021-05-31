@@ -173,11 +173,12 @@ def estimate_primal_python(u_h):
 
     N = create_interpolation(element_f, element_g)
 
-    a_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), a_e)
-    L_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
-    L_eta_form = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_eta)
+    a_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), a_e)
+    L_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
+    L_eta_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_eta)
 
-    cg_dofmap = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)[1]
+    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)
+    cg_dofmap = cg_element_and_dofmap[1]
 
     # Cell integral, no coefficients, no constants.
     a_kernel_cell = a_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
@@ -223,7 +224,7 @@ def estimate_primal_python(u_h):
     # Input for cell integral
     # Geometry [restriction][num_dofs][gdim]
     coefficients = np.zeros((1, 1, 3), dtype=PETSc.ScalarType)
-    geometry = np.zeros((1, 3, 2))
+    geometry = np.zeros((1, 3, 3))
 
     # Interior facet integrals
     # Output for two adjacent cells
@@ -244,7 +245,7 @@ def estimate_primal_python(u_h):
     # Data [coefficient][restriction][dof]
     coefficients_macro = np.zeros((1, 2, 3), dtype=PETSc.ScalarType)
     # Geometry [restriction][num_dofs][gdim]
-    geometry_macro = np.zeros((2, 3, 2))
+    geometry_macro = np.zeros((2, 3, 3))
 
     # Connectivity
     tdim = mesh.topology.dim
@@ -265,7 +266,7 @@ def estimate_primal_python(u_h):
 
         # Pack geometry
         for j in range(3):
-            for k in range(2):
+            for k in range(3):
                 geometry[0, j, k] = x[c[j], k]
 
         # Pack coefficients
