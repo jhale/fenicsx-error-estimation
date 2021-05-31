@@ -24,10 +24,11 @@ def main():
     for i in range(0, 25):
         result = np.zeros(5)
 
-        x = ufl.SpatialCoordinate(mesh)
-        r = ufl.sqrt(x[0]*x[0] + x[1]*x[1])
-        theta = ufl.mathfunctions.Atan2(x[1], x[0]) + ufl.pi/2.
-        u_exact = r**(2./3.)*ufl.sin((2./3.)*theta)
+        def u_exact(x):
+            r = np.sqrt(x[0]*x[0] + x[1]*x[1])
+            theta = np.arctan2(x[1], x[0]) + np.pi/2.
+            values = r**(2./3.)*np.sin((2./3.)*theta)
+            return values
 
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
         u_exact_V = dolfinx.Function(V)
@@ -35,6 +36,7 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/u_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_exact_V)
+        print("u_exact =", u_exact_V.vector[:])
 
         # Solve
         print('Solving...')
@@ -131,14 +133,14 @@ def solve(V, u_exact_V):
         for j in range(len(u_exact_V.vector.array)):
             A_mat[i, j] = A.getValues(i,j)
 
-    print(A_mat)
+    print('A =', A_mat)
 
     b = dolfinx.fem.assemble_vector(L)
-    #dolfinx.fem.apply_lifting(b, [a], [bcs])
+    dolfinx.fem.apply_lifting(b, [a], [bcs])
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
     dolfinx.fem.set_bc(b, bcs)
 
-    print(b.array)
+    print('b =', b.array)
     options = PETSc.Options()
     options["ksp_type"] = "cg"
     options["ksp_view"] = None
