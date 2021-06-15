@@ -3,6 +3,8 @@ import numpy as np
 import mpi4py.MPI as MPI
 import petsc4py.PETSc as PETSc
 
+import pickle
+
 import dolfinx
 from dolfinx.io import XDMFFile
 
@@ -20,16 +22,24 @@ def main():
         mesh = fi.read_mesh(name="Grid")
 
     # Adaptive refinement loop
-    results = [["num_dofs", "hmax", "hmin", "error_bw", "error_exact"]]
-    for i in range(0, 25):
-        result = np.zeros(5)
+    results = {'h min': [], 'h max': [], 'dof': [], 'bw': [], 'error': []}
+    for i in range(0, 20):
+        print(f'STEP {i}')
 
         def u_exact(x):
             r = np.sqrt(x[0] * x[0] + x[1] * x[1])
             theta = np.arctan2(x[1], x[0]) + np.pi / 2.
             values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
+            values[np.where(np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps))] = 0.
             return values
 
+        '''
+        def u_exact(x):
+            values = 2.*np.ones(x.shape[1])
+            values[np.where(np.logical_and(x[0] > 0., x[1] > 0.))] = 0.
+            values[np.where(np.logical_and(x[0] < 0., x[1] > 0.))] = 1.
+            return values
+        '''
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
         u_exact_V = dolfinx.Function(V)
         u_exact_V.interpolate(u_exact)
@@ -53,7 +63,7 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/e_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(e_h)
-        result[3] = np.sqrt(sum(eta_h.vector.array))
+        results['bw'].append(np.sqrt(sum(eta_h.vector.array)))
 
         # Exact local error
         dx = ufl.Measure("dx", domain=mesh.ufl_domain())
@@ -62,7 +72,7 @@ def main():
         v = ufl.TestFunction(V_e)
         eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx)
         eta_exact.vector.setArray(eta)
-        result[4] = np.sqrt(sum(eta_exact.vector.array))
+        results['error'].append(np.sqrt(sum(eta_exact.vector.array)))
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_exact)
@@ -71,10 +81,10 @@ def main():
         h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
             0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
         h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
-        result[1] = h_global[0]
+        results['h max'].append(h_global[0])
         h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
-        result[2] = h_global[0]
-        result[0] = V.dofmap.index_map.size_global
+        results['h min'].append(h_global[0])
+        results['dof'].append(V.dofmap.index_map.size_global)
 
         # Mark
         print('Marking...')
@@ -103,12 +113,10 @@ def main():
 
         with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
-
-        #results = np.concatenate((results, result))
-        #print(results)
+        
+        with open('./output/adaptive_results.pkl', 'wb') as fo:
+            pickle.dump(results, fo)
     
-    np.save('output/results.npy', results)
-
 
 def solve(V, u_exact_V):
     mesh = V.mesh
@@ -122,10 +130,14 @@ def solve(V, u_exact_V):
     a = inner(grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
-    facets = dolfinx.mesh.locate_entities_boundary(
-        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
-    dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
-    bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
+    dbc = dolfinx.Function(V)
+    facets_zero = dolfinx.mesh.locate_entities_boundary(
+        mesh, 1, lambda x: np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps))
+    dofs_zero = dolfinx.fem.locate_dofs_topological(V, 1, facets_zero)
+    facets_exact = dolfinx.mesh.locate_entities_boundary(
+        mesh, 1, lambda x: np.logical_not(np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps)))
+    dofs_exact = dolfinx.fem.locate_dofs_topological(V, 1, facets_exact)
+    bcs = [dolfinx.DirichletBC(dbc, dofs_zero), dolfinx.DirichletBC(u_exact_V, dofs_exact)]
 
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
@@ -198,7 +210,7 @@ def estimate(u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     fenics_error_estimation.estimate(
-        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
+        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)#, e_h=e_h_f)
 
     return eta_h, e_h_f
 
