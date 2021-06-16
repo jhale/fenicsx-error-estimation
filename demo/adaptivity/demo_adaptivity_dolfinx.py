@@ -128,15 +128,7 @@ def solve(V, u_exact_V):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
     bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
-    '''
-    facets_zero = dolfinx.mesh.locate_entities_boundary(
-        mesh, 1, lambda x: np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps))
-    dofs_zero = dolfinx.fem.locate_dofs_topological(V, 1, facets_zero)
-    facets_exact = dolfinx.mesh.locate_entities_boundary(
-        mesh, 1, lambda x: np.logical_not(np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps)))
-    dofs_exact = dolfinx.fem.locate_dofs_topological(V, 1, facets_exact)
-    bcs = [dolfinx.DirichletBC(dbc, dofs_zero), dolfinx.DirichletBC(u_exact_V, dofs_exact)]
-    '''
+    
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
 

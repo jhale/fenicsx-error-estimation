@@ -26,10 +26,25 @@ assert dolfinx.has_petsc_complex == False
 # problem on a square mesh with known data and homogeneous Dirichlet boundary
 # conditions.
 
+'''
+# Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [3, 3],
     CellType.triangle)
+'''
+
+# Unstructured mesh
+with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", "r") as fi:
+    mesh = fi.read_mesh(name="Grid")
+
+
+h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
+    0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
+h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
+print('h_max =', h_global[0])
+h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
+print('h_min =', h_global[0])
 
 element = ufl.FiniteElement("CG", ufl.triangle, 1)
 V = FunctionSpace(mesh, element)
@@ -66,7 +81,7 @@ solver.setOperators(A)
 solver.solve(b, u_h.vector)
 u_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
-with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
+with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
     of.write_mesh(mesh)
     of.write_function(u_h)
 
@@ -117,6 +132,6 @@ fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
-with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+with XDMFFile(MPI.COMM_WORLD, "output/eta.xdmf", "w") as of:
     of.write_mesh(mesh)
     of.write_function(eta_h)
