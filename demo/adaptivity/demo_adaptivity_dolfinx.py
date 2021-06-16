@@ -30,16 +30,9 @@ def main():
             r = np.sqrt(x[0] * x[0] + x[1] * x[1])
             theta = np.arctan2(x[1], x[0]) + np.pi / 2.
             values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
-            values[np.where(np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps))] = 0.
+            values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.) , np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
             return values
 
-        '''
-        def u_exact(x):
-            values = 2.*np.ones(x.shape[1])
-            values[np.where(np.logical_and(x[0] > 0., x[1] > 0.))] = 0.
-            values[np.where(np.logical_and(x[0] < 0., x[1] > 0.))] = 1.
-            return values
-        '''
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
         u_exact_V = dolfinx.Function(V)
         u_exact_V.interpolate(u_exact)
@@ -131,6 +124,11 @@ def solve(V, u_exact_V):
     L = inner(f, v) * dx
 
     dbc = dolfinx.Function(V)
+    facets = dolfinx.mesh.locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
+    bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
+    '''
     facets_zero = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps))
     dofs_zero = dolfinx.fem.locate_dofs_topological(V, 1, facets_zero)
@@ -138,7 +136,7 @@ def solve(V, u_exact_V):
         mesh, 1, lambda x: np.logical_not(np.logical_and(x[0] < np.finfo(float).eps, x[1] < np.finfo(float).eps)))
     dofs_exact = dolfinx.fem.locate_dofs_topological(V, 1, facets_exact)
     bcs = [dolfinx.DirichletBC(dbc, dofs_zero), dolfinx.DirichletBC(u_exact_V, dofs_exact)]
-
+    '''
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
 
@@ -210,7 +208,7 @@ def estimate(u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     fenics_error_estimation.estimate(
-        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)#, e_h=e_h_f)
+        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
 
     return eta_h, e_h_f
 
