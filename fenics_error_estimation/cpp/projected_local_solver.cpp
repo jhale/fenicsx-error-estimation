@@ -71,7 +71,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const auto& a_kernel_domain_integral = a.kernel(type::cell, -1);
   const auto& L_kernel_domain_integral = L.kernel(type::cell, -1);
   std::function<void(T*, const T*, const T*, const double*, const int*,
-                     const std::uint8_t*, const std::uint32_t)>
+                     const std::uint8_t*)>
       L_kernel_exterior_facet;
   if (L.num_integrals(type::exterior_facet) == 1)
   {
@@ -113,9 +113,9 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const int num_cells = map->size_local();
 
   // Needed for all integrals
-  mesh->topology_mutable().create_entity_permutations();
-  const std::vector<unsigned int>& cell_info
-      = mesh->topology().get_cell_permutation_info();
+  // mesh->topology_mutable().create_entity_permutations();
+  // const std::vector<unsigned int>& cell_info
+  //    = mesh->topology().get_cell_permutation_info();
 
   // Needed for facet integrals
   const std::vector<std::uint8_t>& perms
@@ -153,10 +153,10 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     const auto L_coeff_array = L_coeffs.row(c);
     a_kernel_domain_integral(Ae.begin(), a_coeff_array.data(),
                              a_constants.data(), coordinate_dofs.data(),
-                             nullptr, nullptr, cell_info[c]);
+                             nullptr, nullptr);
     L_kernel_domain_integral(be.begin(), L_coeff_array.data(),
                              L_constants.data(), coordinate_dofs.data(),
-                             nullptr, nullptr, cell_info[c]);
+                             nullptr, nullptr);
 
     // Loop over attached facets
     const auto c_f = c_to_f->links(c);
@@ -175,7 +175,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
           // Exterior facet term
           L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
                                   L_constants.data(), coordinate_dofs.data(),
-                                  &local_facet, &perm, cell_info[c]);
+                                  &local_facet, &perm);
         }
       }
       else
@@ -230,8 +230,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 
         L_kernel_interior_facet(
             b_macro.data(), L_coeff_array_macro.data(), L_constants.data(),
-            coordinate_dofs_macro.data(), local_facets.data(), perm.data(),
-            cell_info[f_c[0]]);
+            coordinate_dofs_macro.data(), local_facets.data(), perm.data());
 
         // Assemble appropriate part of A_macro/b_macro into Ae/be.
         int local_cell = (f_c[0] == c ? 0 : 1);
@@ -283,8 +282,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     // Compute indicator
     etae[0] = 0.0;
     L_eta_kernel_domain_integral(etae.data(), xe.data(), L_eta_constants.data(),
-                                 coordinate_dofs.data(), nullptr, nullptr,
-                                 cell_info[c]);
+                                 coordinate_dofs.data(), nullptr, nullptr);
 
     // Assemble.
     const auto dofs_eta = dofmap_eta.links(c);

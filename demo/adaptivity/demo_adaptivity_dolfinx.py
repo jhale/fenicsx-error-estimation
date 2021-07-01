@@ -106,9 +106,10 @@ def main():
 
         with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
-        
-        with open('./output/adaptive_results.pkl', 'wb') as fo:
-            pickle.dump(results, fo)
+   
+    print(results)
+    with open('./output/adaptive_results.pkl', 'wb') as fo:
+        pickle.dump(results, fo)
     
 
 def solve(V, u_exact_V):
