@@ -5,7 +5,7 @@ CONTAINER_ENGINE_OPTIONS="--cgroup-manager=cgroupfs"
 #CONTAINER_ENGINE="docker"
 #CONTAINER_ENGINE_OPTIONS=""
 
-${CONTAINER_ENGINE} pull fenicsproject/test-env:mpich
+${CONTAINER_ENGINE} pull fenicsproject/test-env:latest-mpich
 ${CONTAINER_ENGINE} pull dolfinx/dev-env
 ${CONTAINER_ENGINE} build ${CONTAINER_ENGINE_OPTIONS} --no-cache -t fenics-error-estimation/dolfinx:debug .
 ${CONTAINER_ENGINE} build ${CONTAINER_ENGINE_OPTIONS} --no-cache \
