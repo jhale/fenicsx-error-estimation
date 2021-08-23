@@ -137,7 +137,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   // Once entity closure dofs is coded this should be unnecessary.
   std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Shouldn't it be {{0, 2}, {2, 5}, {3, 0}, {4, 3}, {5, 4}} ?
   // Mapping for CG2/DG2 on tetrahedrons.
-  std::map<int, int> mapping{{0, 2}, {1, 1}, {2, 5}, {3, 9}, {4, 0}, {5, 3}, {7, 4}, {8, 7}, {9, 8}};
+  std::map<int, int> mapping{{0, 2}, {2, 5}, {3, 9}, {4, 0}, {5, 3}, {7, 4}, {8, 7}, {9, 8}};
 
   for (int c = 0; c < num_cells; ++c)
   {
