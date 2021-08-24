@@ -20,11 +20,10 @@ import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
 from ufl.algorithms.elementtransformations import change_regularity
 
-assert dolfinx.has_petsc_complex == False
+mesh = UnitSquareMesh(256, 256)
 
-# The first part of this script is completely standard. We solve a Poisson
-# problem on a square mesh with known data and homogeneous Dirichlet boundary
-# conditions.
+k = 1
+V = FunctionSpace(mesh, "CG", k)
 
 '''
 # Structured mesh
@@ -104,6 +103,7 @@ v = ufl.TestFunction(V_f)
 
 # Bilinear form
 a_e = inner(grad(e), grad(v)) * dx
+L_e = inner(f + div(grad(u_h)), v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
 # Linear form
 n = ufl.FacetNormal(mesh)
