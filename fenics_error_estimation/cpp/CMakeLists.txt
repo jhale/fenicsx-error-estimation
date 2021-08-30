@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 
-project(fenics_error_estimation)
+project(fenics_error_estimation LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,7 @@ find_package(Basix REQUIRED)
 
 find_package(xtensor REQUIRED)
 find_package(xtensor-blas REQUIRED)
+find_package(Python3 REQUIRED Development)
 find_package(pybind11 REQUIRED CONFIG HINTS ${PYBIND11_DIR} ${PYBIND11_ROOT}
   $ENV{PYBIND11_DIR} $ENV{PYBIND11_ROOT})
 find_package(xtensor-python REQUIRED)

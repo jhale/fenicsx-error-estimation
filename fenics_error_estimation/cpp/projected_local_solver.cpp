@@ -113,9 +113,9 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const int num_cells = map->size_local();
 
   // Needed for all integrals
-  // mesh->topology_mutable().create_entity_permutations();
-  // const std::vector<unsigned int>& cell_info
-  //    = mesh->topology().get_cell_permutation_info();
+  mesh->topology_mutable().create_entity_permutations();
+  //const std::vector<unsigned int>& cell_info
+  //  = mesh->topology().get_cell_permutation_info();
 
   // Needed for facet integrals
   const std::vector<std::uint8_t>& perms

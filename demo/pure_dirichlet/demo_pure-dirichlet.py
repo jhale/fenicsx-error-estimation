@@ -26,18 +26,12 @@ assert dolfinx.has_petsc_complex == False
 # problem on a square mesh with known data and homogeneous Dirichlet boundary
 # conditions.
 
-'''
+
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [3, 3],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
     CellType.triangle)
-'''
-
-# Unstructured mesh
-with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", "r") as fi:
-    mesh = fi.read_mesh(name="Grid")
-
 
 h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
     0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))

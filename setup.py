@@ -70,6 +70,8 @@ class CMakeBuild(build_ext):
         cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
 
         env = os.environ.copy()
+        import pybind11
+        env['pybind11_DIR'] = pybind11.get_cmake_dir() 
         env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', ''))
 
         if not os.path.exists(self.build_temp):
