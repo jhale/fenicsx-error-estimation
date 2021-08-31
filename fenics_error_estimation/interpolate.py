@@ -22,9 +22,9 @@ def create_interpolation(element_f, element_g):
 
     basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_f.degree())
     basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_g.degree())
-
-    assert(mesh.ordered())
-    assert(mesh.num_cells() == 1)
+    print(dir(element_f))
+    #assert(mesh.ordered())
+    #assert(mesh.num_cells() == 1)
 
     V_f = FunctionSpace(mesh, element_f)
     V_g = FunctionSpace(mesh, element_g)

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-CONTAINER_ENGINE="podman"
-CONTAINER_ENGINE_OPTIONS="--cgroup-manager=cgroupfs"
-#CONTAINER_ENGINE="docker"
-#CONTAINER_ENGINE_OPTIONS=""
+#CONTAINER_ENGINE="podman"
+#CONTAINER_ENGINE_OPTIONS="--cgroup-manager=cgroupfs"
+CONTAINER_ENGINE="docker"
+CONTAINER_ENGINE_OPTIONS=""
 
 ${CONTAINER_ENGINE} pull fenicsproject/test-env:latest-mpich
 ${CONTAINER_ENGINE} pull dolfinx/dev-env

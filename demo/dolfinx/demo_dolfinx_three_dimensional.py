@@ -8,7 +8,7 @@ from petsc4py import PETSc
 
 import dolfinx
 from dolfinx import cpp
-from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
+from dolfinx import DirichletBC, Function, FunctionSpace, UnitCubeMesh
 from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
                          locate_dofs_topological, set_bc)
