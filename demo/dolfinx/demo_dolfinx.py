@@ -197,7 +197,7 @@ def estimate_primal_python(u_h):
         cg_dofmap.num_entity_dofs), dtype=np.intc)
 
     entity_dofmap = [np.zeros(i, dtype=np.intc) for i in cg_num_entity_dofs]
-
+    
     # Begin unpacking data
     V_dolfin = u_h.function_space
     mesh = V_dolfin.mesh
@@ -278,7 +278,7 @@ def estimate_primal_python(u_h):
         a_kernel_cell(ffi.cast("double *", ffi.from_buffer(A_local)), ffi.NULL,
                       ffi.NULL,
                       ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
-                      ffi.NULL, 0)
+                      ffi.NULL)
 
         # Compared with DOLFIN-old, looks ok, although small difference at 4-5th s.f.
         b_local.fill(0.0)
@@ -286,7 +286,7 @@ def estimate_primal_python(u_h):
                       ffi.cast("double *", ffi.from_buffer(coefficients)),
                       ffi.NULL,
                       ffi.cast("double *", ffi.from_buffer(geometry)), ffi.NULL,
-                      ffi.NULL, 0)
+                      ffi.NULL)
 
         # Compared with DOLFIN-old, looks ok.
         # TODO: Would be nice to reimplement links for numba version.
@@ -331,8 +331,7 @@ def estimate_primal_python(u_h):
                               ffi.cast(
                                   "double *", ffi.from_buffer(geometry_macro)),
                               ffi.cast("int *", ffi.from_buffer(local_facet)),
-                              ffi.cast("uint8_t *", ffi.from_buffer(perm)),
-                              ffi.cast("uint32_t", cells[0]))
+                              ffi.cast("uint8_t *", ffi.from_buffer(perm)))
             # Assemble the relevant part of the macro cell tensor into the
             # local cell tensor.
             # TODO: Generalise
@@ -384,8 +383,7 @@ def estimate_primal_python(u_h):
                           ffi.cast("double *", ffi.from_buffer(e_local)),
                           ffi.NULL,
                           ffi.cast(
-                              "double *", ffi.from_buffer(geometry)), ffi.NULL,
-                          ffi.NULL, 0)
+                              "double *", ffi.from_buffer(geometry)), ffi.NULL, 0)
 
         # Assemble
         dofs = V_e_dofs.cell_dofs(i)
@@ -400,8 +398,8 @@ def estimate_primal_python(u_h):
 def main():
     u = primal()
     estimate_primal(u)
-    if MPI.COMM_WORLD.size == 1:
-        estimate_primal_python(u)
+    #if MPI.COMM_WORLD.size == 1:
+    #    estimate_primal_python(u)
 
 
 if __name__ == "__main__":

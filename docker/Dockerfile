@@ -1,4 +1,4 @@
-ARG IMAGE=fenicsproject/test-env:mpich
+ARG IMAGE=fenicsproject/test-env:latest-mpich
 FROM ${IMAGE}
 
 ARG CMAKE_BUILD_TYPE=Debug
@@ -11,6 +11,7 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     cd xtensor-python && \
     mkdir build && \
     cd build && \
+    export pybind11_DIR=`python3 -c 'import pybind11; print(pybind11.get_cmake_dir())'` && \
     cmake ../ && \
     make install && \
     rm -rf /src/xtensor-python
@@ -21,10 +22,7 @@ RUN git clone https://github.com/FEniCS/dolfinx.git && \
     git clone --depth 1 https://github.com/FEniCS/basix.git && \
     git clone --depth 1 https://github.com/FEniCS/ufl.git
 
-RUN cd basix && cmake -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -B build-dir -S . && \
-    cmake --build build-dir && \
-    cmake --install build-dir && \
-    python3 -m pip install ./python && \
+RUN cd basix && python3 -m pip install . && \
     cd ../ufl && python3 -m pip install . && \
     cd ../ffcx && python3 -m pip install .
 
