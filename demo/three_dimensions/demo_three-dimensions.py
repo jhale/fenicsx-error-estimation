@@ -14,10 +14,6 @@ from dolfin import *
 import fenics_error_estimation
 
 k = 1
-parameters["ghost_mode"] = "shared_facet"
-parameters["form_compiler"]["optimize"] = True
-parameters["form_compiler"]["cpp_optimize"] = True
-
 
 def main():
     mesh = Mesh()

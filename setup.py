@@ -72,7 +72,7 @@ class CMakeBuild(build_ext):
         env = os.environ.copy()
         import pybind11
         env['pybind11_DIR'] = pybind11.get_cmake_dir() 
-        env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', ''))
+        env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', '-O3 -march=native'))
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)

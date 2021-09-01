@@ -162,6 +162,8 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 
     // Loop over attached facets
     const auto c_f = c_to_f->links(c);
+    bool cell_on_boundary = false;
+
     for (int local_facet = 0; local_facet < num_facets; ++local_facet)
     {
       const std::int32_t f = c_f[local_facet];
@@ -170,9 +172,10 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 
       if (f_c.size() == 1)
       {
-        if (L.num_integrals(type::exterior_facet) == 1)
+        // Is exterior facet
+        cell_on_boundary = true;
+	if (L.num_integrals(type::exterior_facet) == 1)
         {
-          // Is exterior facet
           const std::uint8_t perm = perms[c * c_f.size() + local_facet];
           // Exterior facet term
           L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
@@ -243,31 +246,33 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     }
 
     // Apply boundary conditions.
-    xt::xtensor<bool, 1> dofs_on_dirichlet_bc
+    if (cell_on_boundary) {
+      xt::xtensor<bool, 1> dofs_on_dirichlet_bc
         = xt::zeros<bool>({element_space_dimension});
-    for (int local_facet = 0; local_facet < num_facets; ++local_facet)
-    {
-      const std::int32_t f = c_f[local_facet];
-      if (std::binary_search(entities.begin(), entities.end(), f))
+      for (int local_facet = 0; local_facet < num_facets; ++local_facet)
       {
-        // Local facet is on Dirichlet boundary
-        const std::vector<int>& local_dofs
-            = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
-        for (std::size_t k = 0; k < local_dofs.size(); ++k)
+        const std::int32_t f = c_f[local_facet];
+        if (std::binary_search(entities.begin(), entities.end(), f))
         {
-          dofs_on_dirichlet_bc[mapping[local_dofs[k]]] = true;
+          // Local facet is on Dirichlet boundary
+          const std::vector<int>& local_dofs
+              = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
+          for (std::size_t k = 0; k < local_dofs.size(); ++k)
+          {
+            dofs_on_dirichlet_bc[mapping[local_dofs[k]]] = true;
+          }
         }
       }
-    }
 
-    for (int dof = 0; dof < element_space_dimension; ++dof)
-    {
-      if (dofs_on_dirichlet_bc[dof] == true)
+      for (int dof = 0; dof < element_space_dimension; ++dof)
       {
-        xt::row(Ae, dof) = 0.0;
-        xt::col(Ae, dof) = 0.0;
-        Ae(dof, dof) = 1.0;
-        be(dof) = 0.0;
+        if (dofs_on_dirichlet_bc[dof] == true)
+        {
+          xt::row(Ae, dof) = 0.0;
+          xt::col(Ae, dof) = 0.0;
+          Ae(dof, dof) = 1.0;
+          be(dof) = 0.0;
+        }
       }
     }
 
