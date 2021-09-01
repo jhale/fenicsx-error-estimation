@@ -248,12 +248,10 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     for (int local_facet = 0; local_facet < num_facets; ++local_facet)
     {
       const std::int32_t f = c_f[local_facet];
-      const auto* end = entities.data() + entities.size();
-      const auto* it = std::find(entities.data(), end, f);
-      if (it != end)
+      if (std::binary_search(entities.begin(), entities.end(), f))
       {
         // Local facet is on Dirichlet boundary
-        const std::vector<int> local_dofs
+        const std::vector<int>& local_dofs
             = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
         for (std::size_t k = 0; k < local_dofs.size(); ++k)
         {
@@ -295,7 +293,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
       const auto dofs_e = dofmap_e.links(c);
       for (std::size_t i = 0; i < dofs_e.size(); ++i)
       {
-        e[dofs_e[i]] = xe(i);
+        e[dofs_e[i]] = 0.0;
       }
     }
   }
