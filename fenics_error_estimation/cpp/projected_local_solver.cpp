@@ -114,7 +114,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
 
   // Needed for all integrals
   mesh->topology_mutable().create_entity_permutations();
-  //const std::vector<unsigned int>& cell_info
+  // const std::vector<unsigned int>& cell_info
   //  = mesh->topology().get_cell_permutation_info();
 
   // Needed for facet integrals
@@ -135,7 +135,8 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   // Hacky map for CG -> DG dof layout being different.
   // Only works for CG2/DG2 on triangles.
   // Once entity closure dofs is coded this should be unnecessary.
-  //std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Only the edges midpoints dofs are mapped 
+  // std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Only the edges
+  // midpoints dofs are mapped
   // Mapping for CG2/DG2 on tetrahedrons.
   std::map<int, int> mapping{{9, 1}, {8, 3}, {6, 4}, {7, 6}, {5, 7}, {4, 8}};
 
@@ -174,7 +175,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
       {
         // Is exterior facet
         cell_on_boundary = true;
-	if (L.num_integrals(type::exterior_facet) == 1)
+        if (L.num_integrals(type::exterior_facet) == 1)
         {
           const std::uint8_t perm = perms[c * c_f.size() + local_facet];
           // Exterior facet term
@@ -246,9 +247,10 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
     }
 
     // Apply boundary conditions.
-    if (cell_on_boundary) {
+    if (cell_on_boundary)
+    {
       xt::xtensor<bool, 1> dofs_on_dirichlet_bc
-        = xt::zeros<bool>({element_space_dimension});
+          = xt::zeros<bool>({element_space_dimension});
       for (int local_facet = 0; local_facet < num_facets; ++local_facet)
       {
         const std::int32_t f = c_f[local_facet];
