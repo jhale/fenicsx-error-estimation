@@ -135,7 +135,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   // Hacky map for CG -> DG dof layout being different.
   // Only works for CG2/DG2 on triangles.
   // Once entity closure dofs is coded this should be unnecessary.
-  // std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Only the edges midpoints dofs are mapped 
+  //std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Only the edges midpoints dofs are mapped 
   // Mapping for CG2/DG2 on tetrahedrons.
   std::map<int, int> mapping{{9, 1}, {8, 3}, {6, 4}, {7, 6}, {5, 7}, {4, 8}};
 

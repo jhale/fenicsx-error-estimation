@@ -16,12 +16,18 @@ def create_interpolation(element_f, element_g):
     and V_g.
     """
     assert element_f.cell().cellname() == element_g.cell().cellname()
-    assert element_f.cell().cellname() == "triangle"
+    assert element_f.cell().cellname() == "triangle" or element_f.cell().cellname() == "tetrahedron"
     assert element_f.family() == "Discontinuous Lagrange"
     assert element_f.degree() > element_g.degree()
 
-    basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_f.degree())
-    basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_g.degree())
+    if element_f.cell().cellname() == "triangle":
+        basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_f.degree())
+        basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_g.degree())
+    elif element_f.cell().cellname() == "tetrahedron":
+        basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.tetrahedron, element_f.degree())
+        basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.tetrahedron, element_g.degree())
+    else:
+        raise ValueError("Cell must be triangle or tetrahedron.")
 
     # Interpolation element_f to element_g
     points_g = basix_element_g.points

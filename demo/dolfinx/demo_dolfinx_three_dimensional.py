@@ -82,9 +82,9 @@ def estimate_primal(u_h):
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
-    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, 2)
+    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, 1)
+    element_e = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
     N = create_interpolation(element_f, element_g)
 
     V_f = ufl.FunctionSpace(mesh.ufl_domain(), element_f)
@@ -142,12 +142,12 @@ def estimate_primal_python(u_h):
     dx = ufl.Measure("dx", domain=ufl_mesh)
     dS = ufl.Measure("dS", domain=ufl_mesh)
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
+    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, 2)
     # We need this for the local dof mapping. Not used for constructing a form.
-    element_f_cg = ufl.FiniteElement("CG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_f_cg = ufl.FiniteElement("CG", ufl.tetrahedron, 2)
+    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, 1)
     # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
-    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    element_e = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
 
     V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
 
@@ -220,7 +220,7 @@ def estimate_primal_python(u_h):
     b_local = np.zeros(6, dtype=PETSc.ScalarType)
     # Input for cell integral
     # Geometry [restriction][num_dofs][gdim]
-    coefficients = np.zeros((1, 1, 3), dtype=PETSc.ScalarType)
+    coefficients = np.zeros((1, 1, 4), dtype=PETSc.ScalarType)
     geometry = np.zeros((1, 3, 3))
 
     # Interior facet integrals
@@ -240,7 +240,7 @@ def estimate_primal_python(u_h):
 
     # TODO: Generalise
     # Data [coefficient][restriction][dof]
-    coefficients_macro = np.zeros((1, 2, 3), dtype=PETSc.ScalarType)
+    coefficients_macro = np.zeros((1, 2, 4), dtype=PETSc.ScalarType)
     # Geometry [restriction][num_dofs][gdim]
     geometry_macro = np.zeros((2, 3, 3))
 
@@ -289,7 +289,7 @@ def estimate_primal_python(u_h):
         # TODO: Would be nice to reimplement links for numba version.
         # Alternative seems to be manually using offsets.
         facets_for_cell = c_to_f.links(i)
-        assert(len(facets_for_cell) == 3)
+        assert(len(facets_for_cell) == 4)
         for f in facets_for_cell:
             cells = f_to_c.links(f)
             assert(len(cells) == 1 or 2)
@@ -301,7 +301,7 @@ def estimate_primal_python(u_h):
             # for the facet of interest?
             for j in range(0, 2):
                 facets = c_to_f.links(cells[j])
-                assert(len(facets) == 3)
+                assert(len(facets) == 4)
                 index = np.where(facets == f)[0]
                 local_facet[j] = index
 
@@ -398,8 +398,8 @@ def estimate_primal_python(u_h):
 def main():
     u = primal()
     estimate_primal(u)
-    if MPI.COMM_WORLD.size == 1:
-        estimate_primal_python(u)
+    #if MPI.COMM_WORLD.size == 1:
+    #    estimate_primal_python(u)
 
 
 if __name__ == "__main__":
