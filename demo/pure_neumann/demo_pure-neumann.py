@@ -31,7 +31,8 @@ mesh = RectangleMesh(
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
     CellType.triangle)
 
-element = ufl.FiniteElement("CG", ufl.triangle, 1)
+k = 1
+element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
 
@@ -65,8 +66,8 @@ error = MPI.COMM_WORLD.allreduce(assemble_scalar(
 print("True error: {}".format(np.sqrt(error)))
 
 # Now we specify the Bank-Weiser error estimation problem.
-element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+element_f = ufl.FiniteElement("DG", ufl.triangle, k + 1)
+element_g = ufl.FiniteElement("DG", ufl.triangle, k)
 element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 N = fenics_error_estimation.create_interpolation(element_f, element_g)
 

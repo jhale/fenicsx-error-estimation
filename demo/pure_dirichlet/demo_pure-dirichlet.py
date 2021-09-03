@@ -23,7 +23,7 @@ from ufl.algorithms.elementtransformations import change_regularity
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [256, 256],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [16, 16],
     CellType.triangle)
 
 
@@ -34,7 +34,7 @@ print('h_max =', h_global[0])
 h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
 print('h_min =', h_global[0])
 
-k = 1
+k = 3
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
@@ -52,7 +52,7 @@ with u0.vector.localForm() as u0_local:
     u0_local.set(0.0)
 
 facets = locate_entities_boundary(
-    mesh, 1, lambda x: np.full(x.shape[1], True, dtype=bool))
+    mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
 dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
 bcs = [DirichletBC(u0, dofs)]
 
@@ -75,7 +75,8 @@ with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
     of.write_function(u_h)
 
 u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-error = MPI.COMM_WORLD.allreduce(assemble_scalar(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
+error = MPI.COMM_WORLD.allreduce(assemble_scalar(
+    inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
 print("True error: {}".format(np.sqrt(error)))
 
 # Now we specify the Bank-Weiser error estimation problem.
@@ -117,7 +118,7 @@ eta_h = Function(V_e)
 # Dirichlet conditions should be applied.
 facets_sorted = np.sort(facets)
 
-# Estimate the error using the Bank-Weiser approach. 
+# Estimate the error using the Bank-Weiser approach.
 fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets_sorted)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
