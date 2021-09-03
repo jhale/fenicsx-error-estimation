@@ -20,17 +20,14 @@ import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
 from ufl.algorithms.elementtransformations import change_regularity
 
-mesh = UnitSquareMesh(256, 256)
-
-k = 1
-V = FunctionSpace(mesh, "CG", k)
-
-
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
     CellType.triangle)
+
+element = ufl.FiniteElement("Lagrange", ufl.triangle, 1)
+V = FunctionSpace(mesh, element)
 
 h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
     0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
@@ -56,7 +53,8 @@ with u0.vector.localForm() as u0_local:
     u0_local.set(0.0)
 
 facets = locate_entities_boundary(
-    mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    mesh, 1, lambda x: np.full(x.shape[1], True, dtype=bool))
+facets_sorted = np.sort(facets)
 dofs = locate_dofs_topological(V, 1, facets)
 bcs = [DirichletBC(u0, dofs)]
 
@@ -97,7 +95,6 @@ v = ufl.TestFunction(V_f)
 
 # Bilinear form
 a_e = inner(grad(e), grad(v)) * dx
-L_e = inner(f + div(grad(u_h)), v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
 # Linear form
 n = ufl.FacetNormal(mesh)
@@ -122,7 +119,7 @@ eta_h = Function(V_e)
 # Dirichlet conditions should be applied.
 
 # Estimate the error using the Bank-Weiser approach. 
-fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets)
+fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets_sorted)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

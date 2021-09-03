@@ -31,7 +31,7 @@ assert dolfinx.has_petsc_complex == False
 
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 24, 24, 24)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 64, 64, 64)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, 1)
     V = FunctionSpace(mesh, element)
@@ -48,8 +48,8 @@ def primal():
     u0 = Function(V)
     u0.vector.set(0.0)
     facets = locate_entities_boundary(
-        mesh, 1, lambda x: np.full(x.shape[1], True, dtype=bool))
-    dofs = locate_dofs_topological(V, 1, facets)
+        mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
+    dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
     A = assemble_matrix(a, bcs=bcs)
@@ -124,12 +124,13 @@ def estimate_primal(u_h):
 
     # Functions to store results
     eta_h = Function(V_e)
-
+    
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
-        mesh, 1, lambda x: np.full(x.shape[1], True, dtype=bool))
+        mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
+    boundary_entities_sorted = np.sort(boundary_entities)
 
-    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities)
+    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)

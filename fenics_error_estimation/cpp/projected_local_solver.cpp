@@ -132,14 +132,6 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   const auto cell_type = mesh->topology().cell_type();
   const int num_facets = mesh::cell_num_entities(cell_type, tdim - 1);
 
-  // Hacky map for CG -> DG dof layout being different.
-  // Only works for CG2/DG2 on triangles.
-  // Once entity closure dofs is coded this should be unnecessary.
-  // std::map<int, int> mapping{{3, 4}, {4, 3}, {5, 1}};	// Only the edges
-  // midpoints dofs are mapped
-  // Mapping for CG2/DG2 on tetrahedrons.
-  std::map<int, int> mapping{{9, 1}, {8, 3}, {6, 4}, {7, 6}, {5, 7}, {4, 8}};
-
   for (int c = 0; c < num_cells; ++c)
   {
     // Get cell vertex coordinates
@@ -261,7 +253,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
               = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
           for (std::size_t k = 0; k < local_dofs.size(); ++k)
           {
-            dofs_on_dirichlet_bc[mapping[local_dofs[k]]] = true;
+            dofs_on_dirichlet_bc[local_dofs[k]] = true;
           }
         }
       }
@@ -300,7 +292,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
       const auto dofs_e = dofmap_e.links(c);
       for (std::size_t i = 0; i < dofs_e.size(); ++i)
       {
-        e[dofs_e[i]] = 0.0;
+        e[dofs_e[i]] = ;
       }
     }
   }

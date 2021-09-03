@@ -20,14 +20,13 @@ def create_interpolation(element_f, element_g):
     assert element_f.family() == "Discontinuous Lagrange"
     assert element_f.degree() > element_g.degree()
 
-    if element_f.cell().cellname() == "triangle":
-        basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_f.degree())
-        basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.triangle, element_g.degree())
-    elif element_f.cell().cellname() == "tetrahedron":
-        basix_element_f = basix.create_element(basix.ElementFamily.DP, basix.CellType.tetrahedron, element_f.degree())
-        basix_element_g = basix.create_element(basix.ElementFamily.DP, basix.CellType.tetrahedron, element_g.degree())
-    else:
-        raise ValueError("Cell must be triangle or tetrahedron.")
+    ufl_to_basix_cell_map = {"triangle": basix.CellType.triangle, "tetrahedron": basix.CellType.tetrahedron}
+    basix_cell = ufl_to_basix_cell_map[element_f.cell().cellname()]
+
+    basix_element_f = basix.create_element(basix.ElementFamily.P, basix_cell,
+                                           element_f.degree(), basix.LatticeType.equispaced, True)
+    basix_element_g = basix.create_element(basix.ElementFamily.P, basix_cell,
+                                           element_g.degree(), basix.LatticeType.equispaced, True)
 
     # Interpolation element_f to element_g
     points_g = basix_element_g.points
