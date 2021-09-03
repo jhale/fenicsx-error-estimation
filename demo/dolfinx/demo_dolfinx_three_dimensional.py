@@ -29,11 +29,12 @@ ffi = cffi.FFI()
 # Won't try to get it work with complex arithmetic at first
 assert dolfinx.has_petsc_complex == False
 
+k = 2
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 32, 32, 32)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 96, 96, 96)
 
-    element = ufl.FiniteElement("CG", ufl.tetrahedron, 1)
+    element = ufl.FiniteElement("CG", ufl.tetrahedron, k)
     V = FunctionSpace(mesh, element)
     dx = ufl.Measure("dx", domain=mesh)
 
@@ -43,7 +44,7 @@ def primal():
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
     a = inner(grad(u), grad(v)) * dx
-    L = inner(f, v) * dx(degree=3)
+    L = inner(f, v) * dx(degree=k + 3)
 
     u0 = Function(V)
     u0.vector.set(0.0)
@@ -79,12 +80,12 @@ def primal():
     solver.solve(b, u.vector)
     u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
-    with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(u)
+    #with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
+    #    of.write_mesh(mesh)
+    #    of.write_function(u)
 
     u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1]) * sin(2.0 * pi * x[2])
-    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3)), op=MPI.SUM)
+    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
     print("True error: {}".format(np.sqrt(error)))
 
     return u
@@ -95,8 +96,8 @@ def estimate_primal(u_h):
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
-    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, 2)
-    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, 1)
+    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, k + 1)
+    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, k)
     element_e = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
     N = create_interpolation(element_f, element_g)
 
@@ -115,7 +116,7 @@ def estimate_primal(u_h):
 
     # Linear form
     V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
-    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=3)
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=k + 3)
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -137,9 +138,9 @@ def estimate_primal(u_h):
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
-    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(eta_h)
+    #with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+    #    of.write_mesh(mesh)
+    #    of.write_function(eta_h)
 
 
 def main():
