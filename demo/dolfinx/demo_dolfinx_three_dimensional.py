@@ -31,7 +31,7 @@ assert dolfinx.has_petsc_complex == False
 
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 128, 128, 128)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 24, 24, 24)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, 1)
     V = FunctionSpace(mesh, element)
