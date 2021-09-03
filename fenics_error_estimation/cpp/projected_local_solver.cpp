@@ -292,7 +292,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
       const auto dofs_e = dofmap_e.links(c);
       for (std::size_t i = 0; i < dofs_e.size(); ++i)
       {
-        e[dofs_e[i]] = ;
+        e[dofs_e[i]] = xe[i];
       }
     }
   }
