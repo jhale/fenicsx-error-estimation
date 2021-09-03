@@ -45,16 +45,8 @@ v = ufl.TestFunction(V)
 a = inner(grad(u), grad(v)) * dx + inner(u, v) * dx
 L = inner(f, v) * dx
 
-A = assemble_matrix(a)
-A.assemble()
-
-b = assemble_vector(L)
-
-u_h = Function(V)
-solver = PETSc.KSP().create(MPI.COMM_WORLD)
-solver.setOperators(A)
-solver.solve(b, u_h.vector)
-u_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+problem = dolfinx.fem.LinearProblem(a, L, bcs=[], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+u_h = problem.solve()
 
 with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
     of.write_mesh(mesh)

@@ -31,7 +31,7 @@ assert dolfinx.has_petsc_complex == False
 
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 64, 64, 64)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 32, 32, 32)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, 1)
     V = FunctionSpace(mesh, element)
@@ -58,6 +58,7 @@ def primal():
     b = assemble_vector(L)
     apply_lifting(b, [a], [bcs])
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    set_bc(b, bcs)
 
     u = Function(V)
     solver = PETSc.KSP().create(MPI.COMM_WORLD)
@@ -124,7 +125,7 @@ def estimate_primal(u_h):
 
     # Functions to store results
     eta_h = Function(V_e)
-    
+
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))

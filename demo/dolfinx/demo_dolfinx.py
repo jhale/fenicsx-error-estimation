@@ -55,26 +55,15 @@ def primal():
     dofs = locate_dofs_topological(V, 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
-    A = assemble_matrix(a, bcs=bcs)
-    A.assemble()
-
-    b = assemble_vector(L)
-    apply_lifting(b, [a], [bcs])
-    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-    set_bc(b, bcs)
-
-    u = Function(V)
-    solver = PETSc.KSP().create(MPI.COMM_WORLD)
-    solver.setOperators(A)
-    solver.solve(b, u.vector)
-    u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    u = problem.solve()
 
     with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(u)
 
     u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-    error = assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3))
+    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3)), op=MPI.SUM)
     print("True error: {}".format(np.sqrt(error)))
 
     return u
@@ -198,7 +187,7 @@ def estimate_primal_python(u_h):
         cg_dofmap.num_entity_dofs), dtype=np.intc)
 
     entity_dofmap = [np.zeros(i, dtype=np.intc) for i in cg_num_entity_dofs]
-    
+
     # Begin unpacking data
     V_dolfin = u_h.function_space
     mesh = V_dolfin.mesh
@@ -399,7 +388,7 @@ def estimate_primal_python(u_h):
 def main():
     u = primal()
     estimate_primal(u)
-    #if MPI.COMM_WORLD.size == 1:
+    # if MPI.COMM_WORLD.size == 1:
     #    estimate_primal_python(u)
 
 

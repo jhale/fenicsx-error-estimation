@@ -23,18 +23,11 @@ from ufl.algorithms.elementtransformations import change_regularity
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [16, 16],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
     CellType.triangle)
 
 
-h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
-    0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
-h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
-print('h_max =', h_global[0])
-h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
-print('h_min =', h_global[0])
-
-k = 3
+k = 1
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
@@ -56,19 +49,8 @@ facets = locate_entities_boundary(
 dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
 bcs = [DirichletBC(u0, dofs)]
 
-A = assemble_matrix(a, bcs=bcs)
-A.assemble()
-
-b = assemble_vector(L)
-apply_lifting(b, [a], [bcs])
-b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-set_bc(b, bcs)
-
-u_h = Function(V)
-solver = PETSc.KSP().create(MPI.COMM_WORLD)
-solver.setOperators(A)
-solver.solve(b, u_h.vector)
-u_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+u_h = problem.solve()
 
 with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
     of.write_mesh(mesh)
