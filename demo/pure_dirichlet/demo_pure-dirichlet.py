@@ -23,11 +23,9 @@ from ufl.algorithms.elementtransformations import change_regularity
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [256, 256],
     CellType.triangle)
 
-element = ufl.FiniteElement("Lagrange", ufl.triangle, 1)
-V = FunctionSpace(mesh, element)
 
 h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
     0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
@@ -36,7 +34,8 @@ print('h_max =', h_global[0])
 h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
 print('h_min =', h_global[0])
 
-element = ufl.FiniteElement("CG", ufl.triangle, 1)
+k = 1
+element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
 
@@ -54,8 +53,7 @@ with u0.vector.localForm() as u0_local:
 
 facets = locate_entities_boundary(
     mesh, 1, lambda x: np.full(x.shape[1], True, dtype=bool))
-facets_sorted = np.sort(facets)
-dofs = locate_dofs_topological(V, 1, facets)
+dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
 bcs = [DirichletBC(u0, dofs)]
 
 A = assemble_matrix(a, bcs=bcs)
@@ -77,12 +75,12 @@ with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
     of.write_function(u_h)
 
 u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-error = MPI.COMM_WORLD.allreduce(assemble_scalar(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=3)), op=MPI.SUM)
+error = MPI.COMM_WORLD.allreduce(assemble_scalar(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
 print("True error: {}".format(np.sqrt(error)))
 
 # Now we specify the Bank-Weiser error estimation problem.
-element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+element_f = ufl.FiniteElement("DG", ufl.triangle, k + 1)
+element_g = ufl.FiniteElement("DG", ufl.triangle, k)
 element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 N = fenics_error_estimation.create_interpolation(element_f, element_g)
 
@@ -115,8 +113,9 @@ eta_h = Function(V_e)
 # We must apply homogeneous zero Dirichlet condition on the local problems when
 # a (possibly non-zero) Dirichlet condition was applied to the original
 # problem. Due to the way boundary conditions are enforced locally it is only
-# necessary to compute a list of entities (facets) on which homogeneous
+# necessary to compute a sorted list of entities (facets) on which homogeneous
 # Dirichlet conditions should be applied.
+facets_sorted = np.sort(facets)
 
 # Estimate the error using the Bank-Weiser approach. 
 fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets_sorted)
