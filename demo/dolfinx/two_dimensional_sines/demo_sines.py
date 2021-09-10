@@ -1,5 +1,8 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import os
+import shutil
+
 import numpy as np
 
 import cffi
@@ -30,9 +33,8 @@ ffi = cffi.FFI()
 assert dolfinx.has_petsc_complex == False
 
 
-def primal(mesh):
-    element = ufl.FiniteElement("CG", ufl.triangle, 1)
-    V = FunctionSpace(mesh, element)
+def primal(k, V):
+    mesh = V.mesh
     dx = ufl.Measure("dx", domain=mesh)
 
     x = ufl.SpatialCoordinate(mesh)
@@ -47,21 +49,34 @@ def primal(mesh):
     u0.vector.set(0.0)
     facets = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
-    dofs = locate_dofs_topological(V, 1, facets)
+    dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
     problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
     u = problem.solve()
 
-
-    u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3)), op=MPI.SUM)
-    print("True error: {}".format(np.sqrt(error)))
-
     return u
 
+def exact_error(k, u_h):
+    mesh = u_h.function_space.mesh
+    dx = ufl.Measure("dx", domain=mesh.ufl_domain())
 
-def estimate_primal(u_h):
+    element_e = ufl.FiniteElement("DG", mesh.ufl_cell, 0)
+    V_e = FunctionSpace(mesh, element_e)
+    v_e = ufl.TestFunction(V_e)
+
+    # Exact solution
+    x = ufl.SpatialCoordinate(mesh.ufl_domain())
+    u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+
+    eta_h = Function(V_e)
+    eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 3))[:]
+    eta_h.vector.setArray(eta)
+
+    return eta_h
+
+
+def estimate_bw(u_h):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
@@ -108,16 +123,87 @@ def estimate_primal(u_h):
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
-
-    # Try assembling L_eta from e_h directly
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    eta_h_2 = assemble_vector(L_eta)
-    eta_h_2.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h_2.sum())))
 
     return eta_h
 
+def estimate_residual(u_h):
+    mesh = u_h.function_space.mesh
+    ufl_domain = mesh.ufl_domain()
+
+    # Data
+    x = ufl.SpatialCoordinate(mesh.ufl_domain())
+    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+
+    dx = ufl.Measure("dx", domain=ufl_domain)
+    dS = ufl.Measure("dS", domain=ufl_domain)
+
+    n = ufl.FacetNormal(mesh)
+    h_T = ufl.CellDiameter(mesh)
+    h_E = ufl.FacetArea(mesh)
+
+    r = f + div(grad(u_h))
+    J_h = jump(grad(u_h), -n)
+
+    element_e = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
+    V_e = FunctionSpace(mesh, element_e)
+    v_e = ufl.TestFunction(V_e)
+
+    # Interior residual
+    d = mesh.topology.dim
+    R_T = h_T**d * inner(inner(r, r), v_e) * dx
+    eta_T = assemble_vector(R_T)[:]
+
+    # Facets residual
+    R_E = avg(h_E) * inner(inner(J_h, J_h), avg(v_e)) * dS
+    eta_E = assemble_vector(R_E)[:]
+
+    eta_h = Function(V_e)
+    eta = eta_T + eta_E
+    eta_h.vector.setArray(eta)
+
+    return eta_h
+
+def estimate_zz(u_h):
+    mesh = u_h.function_space.mesh
+    ufl_domain = mesh.ufl_domain()
+
+    dx = ufl.Measure("dx", domain=ufl_domain)
+
+    # Recovered gradient construction
+    W = VectorFunctionSpace(mesh, ('CG', 1))
+
+    w_h = ufl.TrialFunction(W)
+    v_h = ufl.TestFunction(W)
+
+    a = Form(inner(w_h, v_h) * dx, {'quadrature_rule': 'vertex', 'representation': 'quadrature'})
+    L = inner(grad(u_h), v_h) * dx
+
+    A = assemble_matrix(a)
+    A.assemble()
+    b = assemble_vector(L)
+
+    G_h = Function(W)
+    solver = PETSc.KSP().create(MPI.COMM_WORLD)
+    PETSc.Options()["ksp_type"] = "cg"
+    PETSc.Options()["ksp_rtol"] = 1E-10
+    PETSc.Options()["pc_type"] = "hypre"
+    PETSc.Options()["pc_hypre_type"] = "boomeramg"
+    solver.setOperators(A)
+    solver.setFromOptions()
+    solver.solve(b, G_h.vector)
+    G_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
+    # ZZ estimator
+    disc_zz = grad(u_h) - G_h
+
+    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    V_e = FunctionSpace(mesh, element_e)
+    v_e = ufl.TestFunction(V_e)
+
+    eta_h = Function(V_e)
+    eta = assemble_vector(inner(inner(disc_zz, disc_zz), v_e) * dx)
+    eta_h.vector.setArray(eta)
+    return eta_h
 
 def estimate_primal_python(u_h):
     mesh = u_h.function_space.mesh
