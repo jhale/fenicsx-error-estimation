@@ -12,7 +12,7 @@ from petsc4py import PETSc
 
 import dolfinx
 from dolfinx import cpp
-from dolfinx import DirichletBC, Function, FunctionSpace, VectorFunctionSpace, UnitSquareMesh
+from dolfinx import DirichletBC, Function, FunctionSpace, VectorFunctionSpace, RectangleMesh
 from dolfinx.common import Timer
 from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
@@ -25,7 +25,7 @@ import fenics_error_estimation.cpp
 from fenics_error_estimation import estimate, create_interpolation
 
 import ufl
-from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
+from ufl import avg, div, dS, dx, grad, inner, jump, sqrt
 from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
@@ -64,27 +64,32 @@ def projection(v, V_f):
     solver.solve(b, v_f.vector)
     v_f.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                            mode=PETSc.ScatterMode.FORWARD)
-
     return v_f
 
 def primal(k, V):
     mesh = V.mesh
     dx = ufl.Measure("dx", domain=mesh)
 
-    x = ufl.SpatialCoordinate(mesh)
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    def u_exact(x):
+        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+        theta = np.arctan2(x[1], x[0]) + np.pi/2.
+        values = r**(2./3.) * np.sin((2./3.) * theta)
+        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+        return values
+
+    f = dolfinx.Function(V)     # Zero data
 
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
     a = inner(grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
-    u0 = Function(V)
-    u0.vector.set(0.0)
+    uD = Function(V)
+    uD.interpolate(u_exact)
     facets = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
-    bcs = [DirichletBC(u0, dofs)]
+    bcs = [DirichletBC(uD, dofs)]
 
     problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
     u = problem.solve()
@@ -95,16 +100,39 @@ def exact_error(k, u_h):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
 
+    element_f = ufl.FiniteElement("CG", ufl.triangle, k+1)
+    V_f = FunctionSpace(mesh, element_f)
+
+    def u_exact(x):
+        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+        theta = np.arctan2(x[1], x[0]) + np.pi/2.
+        values = r**(2./3.) * np.sin((2./3.) * theta)
+        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+        return values
+
+    f = dolfinx.Function(V_f)     # Zero data
+
+    u_f = ufl.TrialFunction(V_f)
+    v_f = ufl.TestFunction(V_f)
+    a = inner(grad(u_f), grad(v_f)) * dx
+    L = inner(f, v_f) * dx
+
+    uD = Function(V_f)
+    uD.interpolate(u_exact)
+    facets = locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    dofs = locate_dofs_topological(V_f, mesh.topology.dim - 1, facets)
+    bcs = [DirichletBC(uD, dofs)]
+
+    problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    u_exact = problem.solve()
+
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     V_e = FunctionSpace(mesh, element_e)
     v_e = ufl.TestFunction(V_e)
 
-    # Exact solution
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-
     eta_h = Function(V_e)
-    eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 3))[:]
+    eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 1))[:]
     eta_h.vector.setArray(eta)
 
     return eta_h
@@ -112,6 +140,7 @@ def exact_error(k, u_h):
 
 def estimate_bw(k, u_h):
     mesh = u_h.function_space.mesh
+    V = u_h.function_space
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
@@ -126,11 +155,26 @@ def estimate_bw(k, u_h):
 
     n = ufl.FacetNormal(mesh.ufl_domain())
 
-    # Data
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    def u_exact(x):
+        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+        theta = np.arctan2(x[1], x[0]) + np.pi/2.
+        values = r**(2./3.) * np.sin((2./3.) * theta)
+        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+        return values
 
-    element_dg = ufl.FiniteElement("DG", ufl.triangle, 2)
+    # Computation Dirichlet boundary data error
+    V_f_global = FunctionSpace(mesh, element_f)
+    g = Function(V_f_global)
+    g.interpolate(u_exact)
+    u_f = Function(V_f_global)
+    u_f.interpolate(u_f)
+    e_D = Function(V_f_global)
+
+    e_D.vector[:] = g.vector[:] - u_f.vector[:]
+
+    f = dolfinx.Function(V)     # Zero data
+
+    element_dg = ufl.FiniteElement("DG", ufl.triangle, 0)
     V_dg = FunctionSpace(mesh, element_dg)
 
     f_dg = projection(f, V_dg)
@@ -158,22 +202,29 @@ def estimate_bw(k, u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h)
+    estimate(eta_h, u_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
     return eta_h
 
-def estimate_residual(u_h):
-    mesh = u_h.function_space.mesh
+def estimate_residual(k, u_h, dirichlet_osc=False):
+    V = u_h.function_space
+    mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
 
-    # Data
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    def u_exact(x):
+        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+        theta = np.arctan2(x[1], x[0]) + np.pi/2.
+        values = r**(2./3.) * np.sin((2./3.) * theta)
+        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+        return values
+
+    f = dolfinx.Function(V)     # Zero data
 
     dx = ufl.Measure("dx", domain=ufl_domain)
+    ds = ufl.Measure("ds", domain=ufl_domain)
     dS = ufl.Measure("dS", domain=ufl_domain)
 
     n = ufl.FacetNormal(mesh)
@@ -196,8 +247,25 @@ def estimate_residual(u_h):
     R_E = avg(h_E) * inner(inner(J_h, J_h), avg(v_e)) * dS
     eta_E = assemble_vector(R_E)[:]
 
+    if dirichlet_osc:
+        if k > 1:
+            element_D = ufl.FiniteElement("CG", ufl.triangle, k-1)
+            V_D = FunctionSpace(mesh, element_D)
+            # Dirichlet oscillations
+            uD = dolfinx.Function(V_D)
+            uD.interpolate(u_exact)
+            surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
+        else:
+            surface_grad_uD = n * 0.
+
+        surface_grad_u_h = grad(u_h) - n * inner(grad(u_h), n)
+        R_D = h_E * inner(inner(surface_grad_u_h - surface_grad_uD, surface_grad_u_h - surface_grad_uD), v_e) * ds
+        eta_D = assemble_vector(R_D)[:]
+    else:
+        eta_D = np.zeros_like(eta_E)
+
     eta_h = Function(V_e)
-    eta = eta_T + eta_E
+    eta = eta_T + eta_E + eta_D
     eta_h.vector.setArray(eta)
 
     return eta_h
@@ -247,7 +315,7 @@ def estimate_zz(u_h):
 def marking(eta):
     mesh = eta.function_space.mesh
     # Dorfler algorithm parameter
-    theta = 0.3
+    theta = 0.5
 
     eta_global = np.sum(eta.vector.array)
     cutoff = theta*eta_global
@@ -267,12 +335,13 @@ def marking(eta):
     return markers_tag
 
 def main():
-    k = 2
+    k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 30
+    max_it = 18
 
-    mesh = UnitSquareMesh(MPI.COMM_WORLD, 4, 4)
 
+    with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
+        mesh = fi.read_mesh(name="Grid")
     try:
         shutil.rmtree(OUTPUT_DIR)
     except:
@@ -285,7 +354,7 @@ def main():
     for d in dirs:
         os.mkdir(os.path.join(OUTPUT_DIR, d))
 
-    results = {'dofs': [], 'true error': [], 'bw estimator': [], 'residual estimator': [], 'zz estimator': []}
+    results = {'dofs': [], 'true error': [], 'bw estimator': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': []}
     for i in range(max_it):
         times = {}
         print(f'step {i+1}')
@@ -316,6 +385,7 @@ def main():
             fo.write_function(eta)
         true_err = np.sqrt(sum(eta.vector.array))
         results['true error'].append(true_err)
+        print('true error=', true_err)
 
         print(f'step {i+1} BW EST. COMPUTATION...')
         with Timer() as t:
@@ -327,11 +397,22 @@ def main():
             fo.write_function(eta)
         bw_est = np.sqrt(sum(eta.vector.array))
         results['bw estimator'].append(bw_est)
-        
-        '''
+        print('bw estimator =', bw_est)
+
         print(f'step {i+1} RESIDUAL EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_residual(u)
+            eta_D = estimate_residual(k, u, dirichlet_osc=True)
+            times['residual estimator D'] = t.elapsed()[0]
+
+        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"residual_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(eta_D)
+        residual_est = np.sqrt(sum(eta_D.vector.array))
+        results['residual estimator D'].append(residual_est)
+
+        print(f'step {i+1} RESIDUAL EST. COMPUTATION...')
+        with Timer() as t:
+            eta = estimate_residual(k, u)
             times['residual estimator'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"residual_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
@@ -339,7 +420,7 @@ def main():
             fo.write_function(eta)
         residual_est = np.sqrt(sum(eta.vector.array))
         results['residual estimator'].append(residual_est)
-
+        '''
         if k == 1:
             print(f'step {i+1} ZZ EST. COMPUTATION...')
             with Timer() as t:
@@ -352,16 +433,18 @@ def main():
             zz_est = np.sqrt(sum(eta.vector.array))
             results['zz estimator'].append(zz_est)
         '''
+
         with open(os.path.join(OUTPUT_DIR, 'results.pkl'), 'wb') as of:
             pkl.dump(results, of)
+        with open(os.path.join(OUTPUT_DIR, 'times.pkl'), 'wb') as of:
+            pkl.dump(times, of)
 
-        markers_tag = marking(eta)
+        markers_tag = marking(eta_D)
 
         mesh.topology.create_entities(mesh.topology.dim - 1)
         refined_mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
 
         mesh = refined_mesh
-
     print(times)
 
 if __name__ == "__main__":

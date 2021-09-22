@@ -60,7 +60,7 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
     return form
 
 
-def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
+def estimate(eta_h, u_h, e_D, a_e, L_e, L_eta, N, bc_entities, e_h=None):
     """Estimate the error using the Bank-Weiser implicit estimation strategy.
     """
     mesh = u_h.function_space.mesh
@@ -68,8 +68,9 @@ def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
 
     a_e_dolfin = _create_form(a_e)
     L_e_dolfin = _create_form(L_e)
+    print('TEST1')
     L_eta_dolfin = _create_form(L_eta)
-
+    print('TEST2')
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
     # Finite element for local solves
@@ -84,10 +85,10 @@ def estimate(eta_h, u_h, a_e, L_e, L_eta, N, bc_entities, e_h=None):
     if e_h is None:
         # This version of the function does not modify the second argument.
         fenics_error_estimation.cpp.projected_local_solver_no_error_solution(
-            eta_h._cpp_object, eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+            eta_h._cpp_object, eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
     else:
         fenics_error_estimation.cpp.projected_local_solver_error_solution(
-            eta_h._cpp_object, e_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
+            eta_h._cpp_object, e_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities)
 
 
 def weighted_estimate(eta_uh, eta_zh):

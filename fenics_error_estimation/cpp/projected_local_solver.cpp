@@ -23,7 +23,7 @@ namespace py = pybind11;
 using namespace dolfinx;
 
 template <typename T, bool compute_error_solution = false>
-void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
+void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h, fem::Function<T>& e_D,
                             const fem::Form<T>& a, const fem::Form<T>& L,
                             const fem::Form<T>& L_eta,
                             const fem::FiniteElement& element,
@@ -100,6 +100,12 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
   std::vector<T>& eta = eta_vec->mutable_array();
 
+  // dofmap and vector of Dirichlet error
+  const graph::AdjacencyList<std::int32_t>& dofmap_e_D
+      = e_D.function_space()->dofmap()->list();
+  std::shared_ptr<la::Vector<T>> e_D_vec = e_D.x();
+  const std::vector<T>& e_D_v = e_D_vec->array();
+
   // dofmap and vector for inserting error solution
   const graph::AdjacencyList<std::int32_t>& dofmap_e
       = e_h.function_space()->dofmap()->list();
@@ -136,6 +142,9 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
   {
     // Get cell vertex coordinates
     auto x_dofs = x_dofmap.links(c);
+    // Get cell dofs Dirichlet error
+    auto e_D_dofs = dofmap_e_D.links(c);
+
     for (std::size_t i = 0; i < x_dofs.size(); ++i)
     {
       std::copy_n(xt::row(x_g, x_dofs[i]).begin(), 3,
@@ -265,7 +274,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h,
           xt::row(Ae, dof) = 0.0;
           xt::col(Ae, dof) = 0.0;
           Ae(dof, dof) = 1.0;
-          be(dof) = 0.0;
+          be(dof) = e_D_v[e_D_dofs[dof]];
         }
       }
     }

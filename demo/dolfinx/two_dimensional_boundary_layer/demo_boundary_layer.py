@@ -12,7 +12,7 @@ from petsc4py import PETSc
 
 import dolfinx
 from dolfinx import cpp
-from dolfinx import DirichletBC, Function, FunctionSpace, VectorFunctionSpace, UnitSquareMesh
+from dolfinx import DirichletBC, Function, FunctionSpace, VectorFunctionSpace, RectangleMesh
 from dolfinx.common import Timer
 from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
@@ -25,7 +25,7 @@ import fenics_error_estimation.cpp
 from fenics_error_estimation import estimate, create_interpolation
 
 import ufl
-from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
+from ufl import avg, div, dS, dx, grad, inner, jump, sqrt
 from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
@@ -72,7 +72,9 @@ def primal(k, V):
     dx = ufl.Measure("dx", domain=mesh)
 
     x = ufl.SpatialCoordinate(mesh)
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    alpha = 0.7
+    u_exact = x[0]**alpha
+    f = -ufl.div(ufl.grad(u_exact))
 
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
@@ -95,16 +97,35 @@ def exact_error(k, u_h):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
 
+    x = ufl.SpatialCoordinate(mesh)
+    alpha = 0.7
+    u_exact = x[0]**alpha
+    f = -ufl.div(ufl.grad(u_exact))
+
+    element_f = ufl.FiniteElement("CG", ufl.triangle, k+1)
+    V_f = FunctionSpace(mesh, element_f)
+
+    u_f = ufl.TrialFunction(V_f)
+    v_f = ufl.TestFunction(V_f)
+    a = inner(grad(u_f), grad(v_f)) * dx
+    L = inner(f, v_f) * dx
+
+    u0 = Function(V_f)
+    u0.vector.set(0.0)
+    facets = locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    dofs = locate_dofs_topological(V_f, mesh.topology.dim - 1, facets)
+    bcs = [DirichletBC(u0, dofs)]
+
+    problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    u_exact = problem.solve()
+
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     V_e = FunctionSpace(mesh, element_e)
     v_e = ufl.TestFunction(V_e)
 
-    # Exact solution
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-
     eta_h = Function(V_e)
-    eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 3))[:]
+    eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 1))[:]
     eta_h.vector.setArray(eta)
 
     return eta_h
@@ -126,11 +147,12 @@ def estimate_bw(k, u_h):
 
     n = ufl.FacetNormal(mesh.ufl_domain())
 
-    # Data
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    x = ufl.SpatialCoordinate(mesh)
+    alpha = 0.7
+    u_exact = x[0]**alpha
+    f = -ufl.div(ufl.grad(u_exact))
 
-    element_dg = ufl.FiniteElement("DG", ufl.triangle, 2)
+    element_dg = ufl.FiniteElement("DG", ufl.triangle, 0)
     V_dg = FunctionSpace(mesh, element_dg)
 
     f_dg = projection(f, V_dg)
@@ -169,9 +191,10 @@ def estimate_residual(u_h):
     mesh = u_h.function_space.mesh
     ufl_domain = mesh.ufl_domain()
 
-    # Data
-    x = ufl.SpatialCoordinate(mesh.ufl_domain())
-    f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+    x = ufl.SpatialCoordinate(mesh)
+    alpha = 0.7
+    u_exact = x[0]**alpha
+    f = -ufl.div(ufl.grad(u_exact))
 
     dx = ufl.Measure("dx", domain=ufl_domain)
     dS = ufl.Measure("dS", domain=ufl_domain)
@@ -247,7 +270,7 @@ def estimate_zz(u_h):
 def marking(eta):
     mesh = eta.function_space.mesh
     # Dorfler algorithm parameter
-    theta = 0.3
+    theta = 0.5
 
     eta_global = np.sum(eta.vector.array)
     cutoff = theta*eta_global
@@ -269,9 +292,13 @@ def marking(eta):
 def main():
     k = 2
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 30
+    max_it = 15
 
-    mesh = UnitSquareMesh(MPI.COMM_WORLD, 4, 4)
+    shift = 0.
+    mesh = RectangleMesh(
+            MPI.COMM_WORLD,
+            [np.array([shift, shift, 0]), np.array([1.+shift, 1.+shift, 0])], [4, 4],
+            CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     try:
         shutil.rmtree(OUTPUT_DIR)
@@ -316,6 +343,7 @@ def main():
             fo.write_function(eta)
         true_err = np.sqrt(sum(eta.vector.array))
         results['true error'].append(true_err)
+        print('true error=', true_err)
 
         print(f'step {i+1} BW EST. COMPUTATION...')
         with Timer() as t:
@@ -327,6 +355,7 @@ def main():
             fo.write_function(eta)
         bw_est = np.sqrt(sum(eta.vector.array))
         results['bw estimator'].append(bw_est)
+        print('bw estimator =', bw_est)
         
         '''
         print(f'step {i+1} RESIDUAL EST. COMPUTATION...')

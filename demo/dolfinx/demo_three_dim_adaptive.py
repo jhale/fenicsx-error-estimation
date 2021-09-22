@@ -98,15 +98,16 @@ def exact_error(k, u_h):
     eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 3))[:]
     eta_h.vector.setArray(eta)
 
+    #global_error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
     return eta_h
 
-def estimate_bw(k, u_h):
+def estimate_bw(k, k_g, k_f, u_h):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
-    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, k + 1)
-    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, k)
+    element_f = ufl.FiniteElement("DG", ufl.tetrahedron, k_f)
+    element_g = ufl.FiniteElement("DG", ufl.tetrahedron, k_g)
     element_e = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
     N = create_interpolation(element_f, element_g)
 
@@ -125,7 +126,9 @@ def estimate_bw(k, u_h):
 
     # Linear form
     V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
-    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=k + 3)
+    deg_T = max(k-2, k_f)
+    deg_E = max(k-1, k_f)
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS(degree = deg_E) + inner(f + div((grad(u_h))), v) * dx(degree = deg_T)
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -148,7 +151,7 @@ def estimate_bw(k, u_h):
 
     return eta_h
 
-def estimate_residual(u_h):
+def estimate_residual(k, u_h):
     mesh = u_h.function_space.mesh
     ufl_domain = mesh.ufl_domain()
     
@@ -171,11 +174,13 @@ def estimate_residual(u_h):
     v_e = ufl.TestFunction(V_e)
 
     # Interior residual
-    R_T = h_T**3 * inner(inner(r, r), v_e) * dx
+    deg = max(0, k - 2)
+    R_T = h_T**2 * inner(inner(r, r), v_e) * dx(degree = deg)
     eta_T = assemble_vector(R_T)[:]
 
     # Facets residual
-    R_E = avg(h_E) * inner(inner(J_h, J_h), avg(v_e)) * dS
+    deg = max(0, k - 1)
+    R_E = avg(h_E) * inner(inner(J_h, J_h), avg(v_e)) * dS(degree = deg)
     eta_E = assemble_vector(R_E)[:]
 
     eta_h = Function(V_e)
@@ -248,18 +253,12 @@ def marking(eta):
     
     return markers_tag
 
-
 def main():
     k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 1
+    max_it = 15
 
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 25, 25, 25)
-
-    try:
-        os.remove(os.path.join(OUTPUT_DIR, 'results.pkl'))
-    except:
-        pass
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 4, 4, 4)
 
     try:
         shutil.rmtree(OUTPUT_DIR)
@@ -304,10 +303,11 @@ def main():
             fo.write_function(eta)
         true_err = np.sqrt(sum(eta.vector.array))
         results['true error'].append(true_err)
+        #results['global error'].append(np.sqrt(global_error))
 
         print(f'step {i+1} BW EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_bw(k, u)
+            eta = estimate_bw(k, k, k + 1, u)
             times['bw estimator'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
@@ -318,9 +318,9 @@ def main():
 
         print(f'step {i+1} RESIDUAL EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_residual(u)
+            eta = estimate_residual(k, u)
             times['residual estimator'] = t.elapsed()[0]
-            
+
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"residual_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta)
