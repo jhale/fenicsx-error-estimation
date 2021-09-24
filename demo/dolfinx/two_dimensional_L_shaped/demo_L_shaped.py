@@ -96,9 +96,10 @@ def primal(k, V):
 
     return u
 
-def exact_error(k, u_h):
+def exact_error(k, u_h, dirichlet_osc=False):
     mesh = u_h.function_space.mesh
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
+    ds = ufl.Measure("ds", domain=mesh.ufl_domain())
 
     element_f = ufl.FiniteElement("CG", ufl.triangle, k+1)
     V_f = FunctionSpace(mesh, element_f)
@@ -133,12 +134,29 @@ def exact_error(k, u_h):
 
     eta_h = Function(V_e)
     eta = assemble_vector(inner(inner(grad(u_h - u_exact), grad(u_h - u_exact)), v_e) * dx(degree=k + 1))[:]
-    eta_h.vector.setArray(eta)
 
+    n = ufl.FacetNormal(mesh)
+    h_E = ufl.FacetArea(mesh)
+    if dirichlet_osc:
+        if k > 1:
+            # Dirichlet oscillations
+            uD = dolfinx.Function(V_f)
+            uD.interpolate(u_exact)
+            surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
+        else:
+            surface_grad_uD = n * 0.
+
+        surface_grad_u_h = grad(u_h) - n * inner(grad(u_h), n)
+        R_D = h_E * inner(inner(surface_grad_u_h - surface_grad_uD, surface_grad_u_h - surface_grad_uD), v_e) * ds
+        eta_D = assemble_vector(R_D)[:]
+    else:
+        eta_D = np.zeros_like(eta_E)
+
+    eta_h.vector.setArray(eta + eta_D)
     return eta_h
 
 
-def estimate_bw(k, u_h):
+def estimate_bw(k, u_h, dirichlet_est=False):
     mesh = u_h.function_space.mesh
     V = u_h.function_space
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
@@ -164,13 +182,16 @@ def estimate_bw(k, u_h):
 
     # Computation Dirichlet boundary data error
     V_f_global = FunctionSpace(mesh, element_f)
-    g = Function(V_f_global)
-    g.interpolate(u_exact)
-    u_f = Function(V_f_global)
-    u_f.interpolate(u_f)
-    e_D = Function(V_f_global)
+    if dirichlet_est:
+        g = Function(V_f_global)
+        g.interpolate(u_exact)
+        u_f = Function(V_f_global)
+        u_f.interpolate(u_f)
+        e_D = Function(V_f_global)
 
-    e_D.vector[:] = g.vector[:] - u_f.vector[:]
+        e_D.vector[:] = g.vector[:] - u_f.vector[:]
+    else:
+        e_D = Function(V_f_global)
 
     f = dolfinx.Function(V)     # Zero data
 
@@ -354,7 +375,7 @@ def main():
     for d in dirs:
         os.mkdir(os.path.join(OUTPUT_DIR, d))
 
-    results = {'dofs': [], 'true error': [], 'bw estimator': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': []}
+    results = {'dofs': [], 'true error': [], 'true error D': [], 'bw estimator': [], 'bw estimator D': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': []}
     for i in range(max_it):
         times = {}
         print(f'step {i+1}')
@@ -375,9 +396,21 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(u)
 
+        print(f'step {i+1} TRUE ERROR D COMPUTATION...')
+        with Timer() as t:
+            eta = exact_error(k, u, dirichlet_osc=True)
+            times['true error D'] = t.elapsed()[0]
+
+        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"true_errors/u_{str(i).zfill(4)}.xdmf"), "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(eta)
+        true_err = np.sqrt(sum(eta.vector.array))
+        results['true error D'].append(true_err)
+        print('true error D=', true_err)
+        
         print(f'step {i+1} TRUE ERROR COMPUTATION...')
         with Timer() as t:
-            eta = exact_error(k, u)
+            eta = exact_error(k, u, dirichlet_osc=True)
             times['true error'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"true_errors/u_{str(i).zfill(4)}.xdmf"), "w") as fo:
@@ -387,9 +420,21 @@ def main():
         results['true error'].append(true_err)
         print('true error=', true_err)
 
+        print(f'step {i+1} BW EST. D COMPUTATION...')
+        with Timer() as t:
+            eta_bw_D = estimate_bw(k, u, dirichlet_est=True)
+            times['bw estimator D'] = t.elapsed()[0]
+
+        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(eta_bw_D)
+        bw_est = np.sqrt(sum(eta_bw_D.vector.array))
+        results['bw estimator D'].append(bw_est)
+        print('bw estimator D =', bw_est)
+        
         print(f'step {i+1} BW EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_bw(k, u)
+            eta = estimate_bw(k, u, dirichlet_est=False)
             times['bw estimator'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
@@ -399,7 +444,7 @@ def main():
         results['bw estimator'].append(bw_est)
         print('bw estimator =', bw_est)
 
-        print(f'step {i+1} RESIDUAL EST. COMPUTATION...')
+        print(f'step {i+1} RESIDUAL EST. D COMPUTATION...')
         with Timer() as t:
             eta_D = estimate_residual(k, u, dirichlet_osc=True)
             times['residual estimator D'] = t.elapsed()[0]
@@ -439,7 +484,7 @@ def main():
         with open(os.path.join(OUTPUT_DIR, 'times.pkl'), 'wb') as of:
             pkl.dump(times, of)
 
-        markers_tag = marking(eta_D)
+        markers_tag = marking(eta_bw_D)
 
         mesh.topology.create_entities(mesh.topology.dim - 1)
         refined_mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)

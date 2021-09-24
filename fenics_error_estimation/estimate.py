@@ -68,9 +68,7 @@ def estimate(eta_h, u_h, e_D, a_e, L_e, L_eta, N, bc_entities, e_h=None):
 
     a_e_dolfin = _create_form(a_e)
     L_e_dolfin = _create_form(L_e)
-    print('TEST1')
     L_eta_dolfin = _create_form(L_eta)
-    print('TEST2')
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
     # Finite element for local solves
