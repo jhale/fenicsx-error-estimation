@@ -268,7 +268,7 @@ def marking(eta):
     return markers_tag
 
 def main():
-    k = 2
+    k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
     max_it = 30
 

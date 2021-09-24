@@ -190,6 +190,9 @@ def estimate_bw(k, u_h, dirichlet_est=False):
         e_D = Function(V_f_global)
 
         e_D.vector[:] = g.vector[:] - u_f.vector[:]
+        with XDMFFile(MPI.COMM_WORLD, './e_D.xdmf', 'w') as of:
+            of.write_mesh(mesh)
+            of.write_function(e_D)
     else:
         e_D = Function(V_f_global)
 

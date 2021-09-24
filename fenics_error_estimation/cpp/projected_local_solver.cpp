@@ -274,7 +274,7 @@ void projected_local_solver(fem::Function<T>& eta_h, fem::Function<T>& e_h, fem:
           xt::row(Ae, dof) = 0.0;
           xt::col(Ae, dof) = 0.0;
           Ae(dof, dof) = 1.0;
-          be(e_D_dofs[dof]) = e_D_v[dof];
+	  be(dof) = e_D_v[e_D_dofs[dof]];
         }
       }
     }
