@@ -24,9 +24,9 @@ def create_interpolation(element_f, element_g):
     basix_cell = ufl_to_basix_cell_map[element_f.cell().cellname()]
 
     basix_element_f = basix.create_element(basix.ElementFamily.P, basix_cell,
-                                           element_f.degree(), basix.LatticeType.equispaced, True)
+                                           element_f.degree(), basix._basixcpp.LagrangeVariant.equispaced, True)
     basix_element_g = basix.create_element(basix.ElementFamily.P, basix_cell,
-                                           element_g.degree(), basix.LatticeType.equispaced, True)
+                                           element_g.degree(), basix._basixcpp.LagrangeVariant.equispaced, True)
 
     # Interpolation element_f to element_g
     points_g = basix_element_g.points
