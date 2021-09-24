@@ -185,8 +185,7 @@ def estimate_bw(k, u_h, dirichlet_est=False):
     if dirichlet_est:
         g = Function(V_f_global)
         g.interpolate(u_exact)
-        u_f = Function(V_f_global)
-        u_f.interpolate(u_f)
+        u_f = projection(u_h, V_f_global)
         e_D = Function(V_f_global)
 
         e_D.vector[:] = g.vector[:] - u_f.vector[:]
@@ -226,7 +225,7 @@ def estimate_bw(k, u_h, dirichlet_est=False):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    estimate(eta_h, u_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h)
+    estimate(eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
