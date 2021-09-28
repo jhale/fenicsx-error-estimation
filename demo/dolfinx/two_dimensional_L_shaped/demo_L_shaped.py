@@ -138,19 +138,16 @@ def exact_error(k, u_h, dirichlet_osc=False):
     n = ufl.FacetNormal(mesh)
     h_E = ufl.FacetArea(mesh)
     if dirichlet_osc:
-        if k > 1:
-            # Dirichlet oscillations
-            uD = dolfinx.Function(V_f)
-            uD.interpolate(u_exact)
-            surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
-        else:
-            surface_grad_uD = n * 0.
+        # Dirichlet oscillations
+        uD = dolfinx.Function(V_f)
+        uD.interpolate(u_exact)
+        surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
 
         surface_grad_u_h = grad(u_h) - n * inner(grad(u_h), n)
         R_D = h_E * inner(inner(surface_grad_u_h - surface_grad_uD, surface_grad_u_h - surface_grad_uD), v_e) * ds
         eta_D = assemble_vector(R_D)[:]
     else:
-        eta_D = np.zeros_like(eta_E)
+        eta_D = np.zeros_like(eta)
 
     eta_h.vector.setArray(eta + eta_D)
     return eta_h
@@ -173,18 +170,16 @@ def estimate_bw(k, u_h, dirichlet_est=False):
 
     n = ufl.FacetNormal(mesh.ufl_domain())
 
-    def u_exact(x):
-        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
-        theta = np.arctan2(x[1], x[0]) + np.pi/2.
-        values = r**(2./3.) * np.sin((2./3.) * theta)
-        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
-        return values
+    x = ufl.SpatialCoordinate(mesh)
+    r = ufl.sqrt(x[0]**2 + x[1]**2)
+    theta = ufl.mathfunctions.Atan2(x[1], x[0])
+
+    u_exact = r**(2./3.)*ufl.sin((2./3.)*(theta + ufl.pi/2.))
 
     # Computation Dirichlet boundary data error
     V_f_global = FunctionSpace(mesh, element_f)
     if dirichlet_est:
-        g = Function(V_f_global)
-        g.interpolate(u_exact)
+        g = projection(u_exact, V_f_global) # Must use projection rather than interpolation to get correct results
         u_f = projection(u_h, V_f_global)
         e_D = Function(V_f_global)
 
@@ -211,7 +206,7 @@ def estimate_bw(k, u_h, dirichlet_est=False):
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
-    e_h = ufl.Coefficient(V_f)
+    e_h = dolfinx.Function(V_f_global)
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
@@ -243,7 +238,7 @@ def estimate_residual(k, u_h, dirichlet_osc=False):
         values = r**(2./3.) * np.sin((2./3.) * theta)
         values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
         return values
-
+    
     f = dolfinx.Function(V)     # Zero data
 
     dx = ufl.Measure("dx", domain=ufl_domain)
@@ -271,15 +266,14 @@ def estimate_residual(k, u_h, dirichlet_osc=False):
     eta_E = assemble_vector(R_E)[:]
 
     if dirichlet_osc:
-        if k > 1:
-            element_D = ufl.FiniteElement("CG", ufl.triangle, k-1)
-            V_D = FunctionSpace(mesh, element_D)
-            # Dirichlet oscillations
-            uD = dolfinx.Function(V_D)
-            uD.interpolate(u_exact)
-            surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
-        else:
-            surface_grad_uD = n * 0.
+        element_D = ufl.FiniteElement("CG", ufl.triangle, k+1)
+
+        V_D = FunctionSpace(mesh, element_D)
+        # Dirichlet oscillations
+        uD = dolfinx.Function(V_D)
+        uD.interpolate(u_exact)
+        #uD = projection(u_exact, V_D)
+        surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
 
         surface_grad_u_h = grad(u_h) - n * inner(grad(u_h), n)
         R_D = h_E * inner(inner(surface_grad_u_h - surface_grad_uD, surface_grad_u_h - surface_grad_uD), v_e) * ds
@@ -293,11 +287,18 @@ def estimate_residual(k, u_h, dirichlet_osc=False):
 
     return eta_h
 
-def estimate_zz(u_h):
+def estimate_zz(u_h, dirichlet_osc=False):
     mesh = u_h.function_space.mesh
     ufl_domain = mesh.ufl_domain()
 
     dx = ufl.Measure("dx", domain=ufl_domain)
+
+    def u_exact(x):
+        r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+        theta = np.arctan2(x[1], x[0]) + np.pi/2.
+        values = r**(2./3.) * np.sin((2./3.) * theta)
+        values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.), np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+        return values
 
     # Recovered gradient construction
     W = VectorFunctionSpace(mesh, ('CG', 1))
@@ -331,7 +332,28 @@ def estimate_zz(u_h):
     v_e = ufl.TestFunction(V_e)
 
     eta_h = Function(V_e)
-    eta = assemble_vector(inner(inner(disc_zz, disc_zz), v_e) * dx)
+    eta_E = assemble_vector(inner(inner(disc_zz, disc_zz), v_e) * dx)[:]
+    
+    if dirichlet_osc:
+        n = ufl.FacetNormal(mesh)
+        h_E = ufl.FacetArea(mesh)
+        ds = ufl.Measure("ds", domain=ufl_domain)
+        element_D = ufl.FiniteElement("CG", ufl.triangle, 2)
+
+        V_D = FunctionSpace(mesh, element_D)
+        # Dirichlet oscillations
+        uD = dolfinx.Function(V_D)
+        uD.interpolate(u_exact)
+        #uD = projection(u_exact, V_D)
+        surface_grad_uD = grad(uD) - n * inner(grad(uD), n)
+
+        surface_grad_u_h = grad(u_h) - n * inner(grad(u_h), n)
+        R_D = h_E * inner(inner(surface_grad_u_h - surface_grad_uD, surface_grad_u_h - surface_grad_uD), v_e) * ds
+        eta_D = assemble_vector(R_D)[:]
+    else:
+        eta_D = np.zeros_like(eta_E)
+
+    eta = eta_E + eta_D
     eta_h.vector.setArray(eta)
     return eta_h
 
@@ -360,7 +382,7 @@ def marking(eta):
 def main():
     k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 18
+    max_it = 15
 
 
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
@@ -377,7 +399,7 @@ def main():
     for d in dirs:
         os.mkdir(os.path.join(OUTPUT_DIR, d))
 
-    results = {'dofs': [], 'true error': [], 'true error D': [], 'bw estimator': [], 'bw estimator D': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': []}
+    results = {'dofs': [], 'true error': [], 'true error D': [], 'bw estimator': [], 'bw estimator D': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': [], 'zz estimator D': []}
     for i in range(max_it):
         times = {}
         print(f'step {i+1}')
@@ -400,25 +422,25 @@ def main():
 
         print(f'step {i+1} TRUE ERROR D COMPUTATION...')
         with Timer() as t:
-            eta = exact_error(k, u, dirichlet_osc=True)
+            eta_err_D = exact_error(k, u, dirichlet_osc=True)
             times['true error D'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"true_errors/u_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(eta)
-        true_err = np.sqrt(sum(eta.vector.array))
-        results['true error D'].append(true_err)
-        print('true error D=', true_err)
+            fo.write_function(eta_err_D)
+        true_err_D = np.sqrt(sum(eta_err_D.vector.array))
+        results['true error D'].append(true_err_D)
+        print('true error D=', true_err_D)
         
         print(f'step {i+1} TRUE ERROR COMPUTATION...')
         with Timer() as t:
-            eta = exact_error(k, u, dirichlet_osc=True)
+            eta_err = exact_error(k, u, dirichlet_osc=False)
             times['true error'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"true_errors/u_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(eta)
-        true_err = np.sqrt(sum(eta.vector.array))
+            fo.write_function(eta_err)
+        true_err = np.sqrt(sum(eta_err.vector.array))
         results['true error'].append(true_err)
         print('true error=', true_err)
 
@@ -427,66 +449,77 @@ def main():
             eta_bw_D = estimate_bw(k, u, dirichlet_est=True)
             times['bw estimator D'] = t.elapsed()[0]
 
-        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_D_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_D)
-        bw_est = np.sqrt(sum(eta_bw_D.vector.array))
-        results['bw estimator D'].append(bw_est)
-        print('bw estimator D =', bw_est)
+        bw_est_D = np.sqrt(sum(eta_bw_D.vector.array))
+        results['bw estimator D'].append(bw_est_D)
+        print('bw estimator D =', bw_est_D)
         
         print(f'step {i+1} BW EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_bw(k, u, dirichlet_est=False)
+            eta_bw = estimate_bw(k, u, dirichlet_est=False)
             times['bw estimator'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(eta)
-        bw_est = np.sqrt(sum(eta.vector.array))
+            fo.write_function(eta_bw)
+        bw_est = np.sqrt(sum(eta_bw.vector.array))
         results['bw estimator'].append(bw_est)
         print('bw estimator =', bw_est)
 
         print(f'step {i+1} RESIDUAL EST. D COMPUTATION...')
         with Timer() as t:
-            eta_D = estimate_residual(k, u, dirichlet_osc=True)
+            eta_res_D = estimate_residual(k, u, dirichlet_osc=True)
             times['residual estimator D'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"residual_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(eta_D)
-        residual_est = np.sqrt(sum(eta_D.vector.array))
-        results['residual estimator D'].append(residual_est)
+            fo.write_function(eta_res_D)
+        residual_est_D = np.sqrt(sum(eta_res_D.vector.array))
+        results['residual estimator D'].append(residual_est_D)
 
         print(f'step {i+1} RESIDUAL EST. COMPUTATION...')
         with Timer() as t:
-            eta = estimate_residual(k, u)
+            eta_res = estimate_residual(k, u, dirichlet_osc=False)
             times['residual estimator'] = t.elapsed()[0]
 
         with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"residual_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(eta)
-        residual_est = np.sqrt(sum(eta.vector.array))
+            fo.write_function(eta_res)
+        residual_est = np.sqrt(sum(eta_res.vector.array))
         results['residual estimator'].append(residual_est)
-        '''
+
         if k == 1:
             print(f'step {i+1} ZZ EST. COMPUTATION...')
             with Timer() as t:
-                eta = estimate_zz(u)
+                eta_zz = estimate_zz(u, dirichlet_osc=False)
                 times['zz estimator'] = t.elapsed()[0]
 
             with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"zz_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
                 fo.write_mesh(mesh)
-                fo.write_function(eta)
-            zz_est = np.sqrt(sum(eta.vector.array))
+                fo.write_function(eta_zz)
+            zz_est = np.sqrt(sum(eta_zz.vector.array))
             results['zz estimator'].append(zz_est)
-        '''
+            
+            print(f'step {i+1} ZZ EST. D COMPUTATION...')
+            with Timer() as t:
+                eta_zz_D = estimate_zz(u, dirichlet_osc=True)
+                times['zz estimator'] = t.elapsed()[0]
+
+            with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"zz_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
+                fo.write_mesh(mesh)
+                fo.write_function(eta_zz_D)
+            zz_est_D = np.sqrt(sum(eta_zz_D.vector.array))
+            results['zz estimator D'].append(zz_est_D)
+
 
         with open(os.path.join(OUTPUT_DIR, 'results.pkl'), 'wb') as of:
             pkl.dump(results, of)
         with open(os.path.join(OUTPUT_DIR, 'times.pkl'), 'wb') as of:
             pkl.dump(times, of)
 
-        markers_tag = marking(eta_bw_D)
+        markers_tag = marking(eta_res)
 
         mesh.topology.create_entities(mesh.topology.dim - 1)
         refined_mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
