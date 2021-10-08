@@ -23,14 +23,15 @@ namespace py = pybind11;
 using namespace dolfinx;
 
 template <typename T, bool compute_error_solution = false>
-void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D_h,
+void projected_local_solver(fem::Function<T>& eta_h,
+                            const fem::Function<T>& e_D_h,
                             const fem::Form<T>& a, const fem::Form<T>& L,
                             const fem::Form<T>& L_eta,
                             const fem::FiniteElement& element,
                             const fem::ElementDofLayout& element_dof_layout,
                             const xt::pytensor<T, 2>& N,
                             const xt::pytensor<std::int32_t, 1>& entities,
-			    fem::Function<T>& e_h)
+                            fem::Function<T>& e_h)
 {
   const auto mesh = a.mesh();
   assert(mesh == L.mesh());
@@ -47,8 +48,8 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
   xt::xtensor<T, 1> be_0, xe_0, xe;
 
   // Prepare coefficients
-  const dolfinx::array2d<double> a_coeffs = pack_coefficients(a);
-  const dolfinx::array2d<double> L_coeffs = pack_coefficients(L);
+  const auto [a_coeffs, a_cstride] = pack_coefficients(a);
+  const auto [L_coeffs, L_cstride] = pack_coefficients(L);
 
   const std::vector<int> L_offsets = L.coefficient_offsets();
   std::vector<T> L_coeff_array_macro(2 * L_offsets.back());
@@ -152,14 +153,12 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
     std::fill(Ae.begin(), Ae.end(), 0.0);
     std::fill(be.begin(), be.end(), 0.0);
 
-    const auto a_coeff_array = a_coeffs.row(c);
-    const auto L_coeff_array = L_coeffs.row(c);
-    a_kernel_domain_integral(Ae.begin(), a_coeff_array.data(),
-                             a_constants.data(), coordinate_dofs.data(),
-                             nullptr, nullptr);
-    L_kernel_domain_integral(be.begin(), L_coeff_array.data(),
-                             L_constants.data(), coordinate_dofs.data(),
-                             nullptr, nullptr);
+    const double* a_coeff_cell = a_coeffs.data() + cell * a_cstride;
+    const double* L_coeff_cell = L_coeffs.data() + cell * L_cstride;
+    a_kernel_domain_integral(Ae.begin(), a_coeff_cell, a_constants.data(),
+                             coordinate_dofs.data(), nullptr, nullptr);
+    L_kernel_domain_integral(be.begin(), L_coeff_cell, L_constants.data(),
+                             coordinate_dofs.data(), nullptr, nullptr);
 
     // Loop over attached facets
     const auto c_f = c_to_f->links(c);
@@ -179,9 +178,8 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
         {
           const std::uint8_t perm = perms[c * c_f.size() + local_facet];
           // Exterior facet term
-          L_kernel_exterior_facet(be.data(), L_coeff_array.data(),
-                                  L_constants.data(), coordinate_dofs.data(),
-                                  &local_facet, &perm);
+          L_kernel_exterior_facet(be.data(), L_coeff_cell, L_constants.data(),
+                                  coordinate_dofs.data(), &local_facet, &perm);
         }
       }
       else
@@ -217,17 +215,17 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
 
         // Layout for the restricted coefficients is flattened
         // w[coefficient][restriction][dof]
-        const auto L_coeff_cell0 = L_coeffs.row(f_c[0]);
-        const auto L_coeff_cell1 = L_coeffs.row(f_c[1]);
+        const double* L_coeff_cell0 = L_coeffs.data() + f_c[0] * L_cstride;
+        const double* L_coeff_cell1 = L_coeffs.data() + f_c[1] * L_cstride;
 
         // Loop over coefficients for L
         for (std::size_t i = 0; i < L_offsets.size() - 1; ++i)
         {
           // Loop over entries for coefficient i
           const int num_entries = L_offsets[i + 1] - L_offsets[i];
-          std::copy_n(L_coeff_cell0.data() + L_offsets[i], num_entries,
+          std::copy_n(L_coeff_cell0 + L_offsets[i], num_entries,
                       std::next(L_coeff_array_macro.begin(), 2 * L_offsets[i]));
-          std::copy_n(L_coeff_cell1.data() + L_offsets[i], num_entries,
+          std::copy_n(L_coeff_cell1 + L_offsets[i], num_entries,
                       std::next(L_coeff_array_macro.begin(),
                                 L_offsets[i + 1] + L_offsets[i]));
         }
@@ -248,7 +246,7 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
 
     // Get cell dofs Dirichlet error
     auto e_D_dofs = dofmap_e_D.links(c);
-    
+
     // Apply boundary conditions.
     if (cell_on_boundary)
     {
@@ -277,7 +275,7 @@ void projected_local_solver(fem::Function<T>& eta_h, const fem::Function<T>& e_D
           xt::col(Ae, dof) = 0.0;
           Ae(dof, dof) = 1.0;
           be(dof) = e_D[e_D_dofs[dof]];
-	}
+        }
       }
     }
 
