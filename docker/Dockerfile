@@ -7,6 +7,13 @@ ARG PIP_EXTRA_FLAGS="--global-option --debug"
 
 WORKDIR /src
 
+RUN git clone https://github.com/xtensor-stack/xtensor-blas.git && \
+    cd xtensor-blas && \
+    mkdir build && \
+    cd build && \
+    cmake ../ && \
+    make install && \
+    rm -rf /src/xtensor-blas
 RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     cd xtensor-python && \
     mkdir build && \
