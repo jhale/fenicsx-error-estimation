@@ -153,8 +153,8 @@ void projected_local_solver(fem::Function<T>& eta_h,
     std::fill(Ae.begin(), Ae.end(), 0.0);
     std::fill(be.begin(), be.end(), 0.0);
 
-    const double* a_coeff_cell = a_coeffs.data() + cell * a_cstride;
-    const double* L_coeff_cell = L_coeffs.data() + cell * L_cstride;
+    const double* a_coeff_cell = a_coeffs.data() + c * a_cstride;
+    const double* L_coeff_cell = L_coeffs.data() + c * L_cstride;
     a_kernel_domain_integral(Ae.begin(), a_coeff_cell, a_constants.data(),
                              coordinate_dofs.data(), nullptr, nullptr);
     L_kernel_domain_integral(be.begin(), L_coeff_cell, L_constants.data(),
