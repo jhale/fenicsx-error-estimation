@@ -3,7 +3,7 @@ import numpy as np
 import mpi4py.MPI as MPI
 import petsc4py.PETSc as PETSc
 
-import pickle
+import pandas
 
 import dolfinx
 from dolfinx.io import XDMFFile
@@ -22,15 +22,18 @@ def main():
         mesh = fi.read_mesh(name="Grid")
 
     # Adaptive refinement loop
-    results = {'h min': [], 'h max': [], 'dof': [], 'bw': [], 'error': []}
+    results = []
     for i in range(0, 20):
+        result = {}
+        
         print(f'STEP {i}')
 
         def u_exact(x):
             r = np.sqrt(x[0] * x[0] + x[1] * x[1])
             theta = np.arctan2(x[1], x[0]) + np.pi / 2.
             values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
-            values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.) , np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+            values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.),
+                                          np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
             return values
 
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
@@ -56,7 +59,7 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/e_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(e_h)
-        results['bw'].append(np.sqrt(sum(eta_h.vector.array)))
+        result['error_bw'] = np.sqrt(np.sum(eta_h.vector.array))
 
         # Exact local error
         dx = ufl.Measure("dx", domain=mesh.ufl_domain())
@@ -65,7 +68,7 @@ def main():
         v = ufl.TestFunction(V_e)
         eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx)
         eta_exact.vector.setArray(eta)
-        results['error'].append(np.sqrt(sum(eta_exact.vector.array)))
+        result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_exact)
@@ -73,11 +76,11 @@ def main():
         # Necessary for parallel operation
         h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
             0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
-        h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
-        results['h max'].append(h_global[0])
-        h_global = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
-        results['h min'].append(h_global[0])
-        results['dof'].append(V.dofmap.index_map.size_global)
+        h_max = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
+        result['h_max'] = h_max
+        h_min = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
+        result['h_min'] = h_min
+        result['num_dofs'] = V.dofmap.index_map.size_global
 
         # Mark
         print('Marking...')
@@ -94,7 +97,7 @@ def main():
             if rolling_sum > cutoff:
                 breakpoint = i
                 break
-        
+
         refine_cells = sorted_cells[0:breakpoint + 1]
         indices = np.array(np.sort(refine_cells), dtype=np.int32)
         markers = np.zeros(indices.shape, dtype=np.int8)
@@ -106,11 +109,13 @@ def main():
 
         with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
-   
-    print(results)
-    with open('./output/adaptive_results.pkl', 'wb') as fo:
-        pickle.dump(results, fo)
-    
+
+        results.append(result)
+
+    df = pandas.DataFrame.from_dict(results)
+    df.to_pickle("output/results.pkl")
+    print(df)
+
 
 def solve(V, u_exact_V):
     mesh = V.mesh
@@ -129,7 +134,7 @@ def solve(V, u_exact_V):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
     bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
-    
+
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
 

@@ -25,14 +25,11 @@ from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
 
-
-# Won't try to get it work with complex arithmetic at first
-assert dolfinx.has_petsc_complex == False
-
 k = 2
 
+
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 96, 96, 96)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 16, 16, 16)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, k)
     V = FunctionSpace(mesh, element)
@@ -80,9 +77,9 @@ def primal():
     solver.solve(b, u.vector)
     u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
-    #with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
-    #    of.write_mesh(mesh)
-    #    of.write_function(u)
+    with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(u)
 
     u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1]) * sin(2.0 * pi * x[2])
     error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
@@ -116,7 +113,7 @@ def estimate_primal(u_h):
 
     # Linear form
     V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
-    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=k + 3)
+    L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=k + 2)
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -127,20 +124,22 @@ def estimate_primal(u_h):
     # Functions to store results
     eta_h = Function(V_e)
 
+    # Dirichlet data
+    V_f_dolfin = dolfinx.FunctionSpace(mesh, ufl.FiniteElement("DG", ufl.tetrahedron, k + 1))
+    e_D = Function(V_f_dolfin)
+
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    estimate(eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
+    estimate(eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
-    # Ghost update is not strictly necessary on DG_0 space but left anyway
-    eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
-    #with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
-    #    of.write_mesh(mesh)
-    #    of.write_function(eta_h)
+    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+        of.write_mesh(mesh)
+        of.write_function(eta_h)
 
 
 def main():
