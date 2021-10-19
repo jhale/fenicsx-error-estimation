@@ -26,10 +26,6 @@ from ufl.algorithms.elementtransformations import change_regularity
 ffi = cffi.FFI()
 
 
-# Won't try to get it work with complex arithmetic at first
-assert dolfinx.has_petsc_complex == False
-
-
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
