@@ -29,7 +29,7 @@ ffi = cffi.FFI()
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
         CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
