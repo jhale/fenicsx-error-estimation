@@ -6,6 +6,7 @@
 
 #include <xtensor-blas/xlinalg.hpp>
 #include <xtensor/xtensor.hpp>
+#include <xtl/xspan.hpp>
 
 #include <pybind11/pybind11.h>
 #define FORCE_IMPORT_ARRAY
@@ -100,19 +101,19 @@ void projected_local_solver(fem::Function<T>& eta_h,
   const graph::AdjacencyList<std::int32_t>& dofmap_eta
       = eta_h.function_space()->dofmap()->list();
   std::shared_ptr<la::Vector<T>> eta_vec = eta_h.x();
-  xt::span<T>& eta = eta_vec->mutable_array();
+  xtl::span<T> eta = eta_vec->mutable_array();
 
   // dofmap and vector of Dirichlet error
   const graph::AdjacencyList<std::int32_t>& dofmap_e_D
       = e_D_h.function_space()->dofmap()->list();
   std::shared_ptr<const la::Vector<T>> e_D_vec = e_D_h.x();
-  const xt::span<T>& e_D = e_D_vec->array();
+  const xtl::span<const T> e_D = e_D_vec->array();
 
   // dofmap and vector for inserting error solution
   const graph::AdjacencyList<std::int32_t>& dofmap_e
       = e_h.function_space()->dofmap()->list();
   std::shared_ptr<la::Vector<T>> e_vec = e_h.x();
-  xt::span<T>& e = e_vec->mutable_array();
+  xtl::span<T> e = e_vec->mutable_array();
 
   // Iterate over active cells
   const int tdim = mesh->topology().dim();

@@ -16,6 +16,7 @@ RUN git clone https://github.com/xtensor-stack/xtensor-blas.git && \
     rm -rf /src/xtensor-blas
 RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     cd xtensor-python && \
+    git checkout 0.25.3 && \
     mkdir build && \
     cd build && \
     export pybind11_DIR=`python3 -c 'import pybind11; print(pybind11.get_cmake_dir())'` && \
