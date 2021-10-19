@@ -195,13 +195,14 @@ def estimate(u_h):
     # Function to store result
     eta_h = dolfinx.Function(V_e)
     e_h_f = dolfinx.Function(V_f)
+    e_D = dolfinx.Function(V_f)
 
     # Boundary conditions
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     fenics_error_estimation.estimate(
-        eta_h, u_h, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
+        eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
 
     return eta_h, e_h_f
 
