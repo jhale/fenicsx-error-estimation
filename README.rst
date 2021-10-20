@@ -57,7 +57,7 @@ Getting started
 
         git clone https://github.org/jhale/fenicsx-error-estimation
 
-2. We currently require a custom build of FEniCSx.
+2. We currently require a custom build of FEniCSx::
 
         cd docker
         ./build-images.sh
