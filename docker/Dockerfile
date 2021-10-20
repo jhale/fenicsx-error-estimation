@@ -25,10 +25,10 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     rm -rf /src/xtensor-python
 
 RUN git clone https://github.com/FEniCS/dolfinx.git && \
-    cd dolfinx && git checkout jhale/remove-function-space-check && cd ../ && \
-    git clone --depth 1 https://github.com/FEniCS/ffcx.git && \
-    git clone --depth 1 https://github.com/FEniCS/basix.git && \
-    git clone --depth 1 https://github.com/FEniCS/ufl.git
+    cd dolfinx && git checkout f6e7103 && cd ../ && \
+    git clone --depth 1 https://github.com/FEniCS/ffcx.git@bfff61f && \
+    git clone --depth 1 https://github.com/FEniCS/basix.git@0902318 && \
+    git clone --depth 1 https://github.com/FEniCS/ufl.git@bcae965
 
 RUN cd basix && python3 -m pip install . && \
     cd ../ufl && python3 -m pip install . && \
