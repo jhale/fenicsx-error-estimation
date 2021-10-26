@@ -43,3 +43,5 @@ RUN cd dolfinx && \
     ninja install && \
     cd ../python && \
     CXXFLAGS=${CXXFLAGS} python3 -m pip -v install --global-option build ${PIP_EXTRA_FLAGS} .
+
+RUN python3 -m pip install pandas matplotlib mpltools

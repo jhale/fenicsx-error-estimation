@@ -18,9 +18,6 @@ import fenics_error_estimation
 
 import ufl
 from ufl import avg, cos, div, dot, dS, dx, grad, inner, jump, pi, sin
-from ufl.algorithms.elementtransformations import change_regularity
-
-assert dolfinx.has_petsc_complex == False
 
 # The first part of this script is completely standard. We solve a screened
 # Poisson problem on a square mesh with known data and homogeneous Neumann
@@ -88,6 +85,10 @@ e_h = ufl.Coefficient(V_f)
 v_e = ufl.TestFunction(V_e)
 L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
+# Dirichlet data
+V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+e_D = Function(V_f_dolfin)
+
 # Functions to store results
 eta_h = Function(V_e)
 
@@ -95,7 +96,7 @@ eta_h = Function(V_e)
 # As we are solving a Neumann problem we pass an empty list of facet ids so
 # that no Dirichlet conditions are applied to the local Bank-Weiser problems.
 facets = np.array([], dtype=np.int32)
-fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets)
+fenics_error_estimation.estimate(eta_h, e_D, a_e, L_e, L_eta, N, facets)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

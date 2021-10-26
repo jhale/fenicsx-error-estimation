@@ -29,7 +29,7 @@ ffi = cffi.FFI()
 def primal():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
         CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -171,21 +171,20 @@ def estimate_primal_python(u_h):
     cg_dofmap = cg_element_and_dofmap[1]
 
     # Cell integral, no coefficients, no constants.
-    a_kernel_cell = a_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
+    a_kernel_cell = a_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor_float64
 
     # Cell integral, one coefficient (CG1), no constants.
-    L_kernel_cell = L_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
+    L_kernel_cell = L_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor_float64
     # Interior facet integral, one coefficient, no constant.
-    L_kernel_interior = L_form.integrals(dolfinx.fem.IntegralType.interior_facet)[0].tabulate_tensor
+    L_kernel_interior = L_form.integrals(dolfinx.fem.IntegralType.interior_facet)[0].tabulate_tensor_float64
 
     # Cell integral, one coefficient (DG2), no constants.
-    L_eta_kernel_cell = L_eta_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor
+    L_eta_kernel_cell = L_eta_form.integrals(dolfinx.fem.IntegralType.cell)[0].tabulate_tensor_float64
 
     # Construct local entity dof map
     cg_tabulate_entity_dofs = cg_dofmap.tabulate_entity_dofs
     cg_num_entity_dofs = np.frombuffer(ffi.buffer(
-        cg_dofmap.num_entity_dofs), dtype=np.intc)
-
+        cg_dofmap.num_entity_dofs, ffi.sizeof("int") * 4), dtype=np.intc)
     entity_dofmap = [np.zeros(i, dtype=np.intc) for i in cg_num_entity_dofs]
 
     # Begin unpacking data
@@ -245,11 +244,6 @@ def estimate_primal_python(u_h):
     # Final error estimator calculation
     # Output
     eta_local = np.zeros(1, dtype=PETSc.ScalarType)
-
-    # To fix the issue with DG -> CG dof mapping change
-    def mapper(entry):
-        return mapping[entry] if entry in mapping else entry
-    mapper_vec = np.vectorize(mapper, otypes=[np.int32])
 
     for i in range(0, num_cells):
         c = x_dofs.links(i)
@@ -338,16 +332,12 @@ def estimate_primal_python(u_h):
             if len(global_facet) == 0:
                 continue
 
-            # TODO: Would need to handle edge dofs in 3D.
             # Local facet dofs
             cg_tabulate_entity_dofs(ffi.from_buffer(
                 "int *", entity_dofmap[1]), 1, j)
             local_dofs.append(np.copy(entity_dofmap[1]))
 
         local_dofs = np.unique(np.array(local_dofs).reshape(-1))
-        mapping = {3: 4, 4: 3, 5: 1}
-
-        local_dofs = mapper_vec(local_dofs)
 
         # Set Dirichlet boundary conditions on local system
         # TODO: Need to generalise to non-zero condition?
@@ -373,7 +363,9 @@ def estimate_primal_python(u_h):
                           ffi.cast("double *", ffi.from_buffer(e_local)),
                           ffi.NULL,
                           ffi.cast(
-                              "double *", ffi.from_buffer(geometry)), ffi.NULL, 0)
+                              "double *", ffi.from_buffer(geometry)),
+                          ffi.cast("int *", ffi.from_buffer(local_facet)),
+                          ffi.cast("uint8_t *", ffi.from_buffer(perm)))
 
         # Assemble
         dofs = V_e_dofs.cell_dofs(i)
@@ -388,8 +380,8 @@ def estimate_primal_python(u_h):
 def main():
     u = primal()
     estimate_primal(u)
-    # if MPI.COMM_WORLD.size == 1:
-    #    estimate_primal_python(u)
+    if MPI.COMM_WORLD.size == 1:
+        estimate_primal_python(u)
 
 
 if __name__ == "__main__":

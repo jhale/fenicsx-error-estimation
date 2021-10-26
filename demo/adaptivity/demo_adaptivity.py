@@ -1,178 +1,216 @@
-# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
-# SPDX-License-Identifier: LGPL-3.0-or-later
-
-# Poisson problem on L-shaped domain with adaptive mesh refinement.  This is a
-# classic problem shown in almost every paper on the topic.
-
-import os
-
 import numpy as np
-import pandas as pd
 
-from dolfin import *
+import mpi4py.MPI as MPI
+import petsc4py.PETSc as PETSc
 
-import mpi4py.MPI
+import pandas
 
-import fenics_error_estimation
+import dolfinx
+from dolfinx.io import XDMFFile
 
-# We use DG functionality, requiring ghost regions on facets.
-parameters["ghost_mode"] = "shared_facet"
+import ufl
+from ufl import avg, div, grad, inner, jump
 
-current_dir = os.path.dirname(os.path.realpath(__file__))
-with open(os.path.join(current_dir, "exact_solution.h"), "r") as f:
-    u_exact_code = f.read()
+import fenics_error_estimation.estimate
+from fenics_error_estimation import create_interpolation
 
-k = 2
-u_exact = CompiledExpression(compile_cpp_code(u_exact_code).Exact(), element=FiniteElement("CG", triangle, k + 3))
+k = 1
 
 
 def main():
-    comm = MPI.comm_world
-    mesh = Mesh(comm)
+    with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
+        mesh = fi.read_mesh(name="Grid")
 
-    # The mesh is generated via gmsh.
-    try:
-        with XDMFFile(comm, os.path.join(current_dir, 'mesh.xdmf')) as f:
-            f.read(mesh)
-    except IOError:
-        print(
-            "Generate the mesh using `python3 generate_mesh.py` before running this script.")
-        exit()
-
-    # Adaptive refinement loops
+    # Adaptive refinement loop
     results = []
-    for i in range(0, 25):
+    for i in range(0, 20):
         result = {}
+        
+        print(f'STEP {i}')
+
+        def u_exact(x):
+            r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+            theta = np.arctan2(x[1], x[0]) + np.pi / 2.
+            values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
+            values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.),
+                                          np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+            return values
+
+        V = dolfinx.FunctionSpace(mesh, ("CG", k))
+        u_exact_V = dolfinx.Function(V)
+        u_exact_V.interpolate(u_exact)
+        with XDMFFile(MPI.COMM_WORLD, f"output/u_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(u_exact_V)
 
         # Solve
-        print("Solving...")
-        V = FunctionSpace(mesh, "CG", k)
-        u_h = solve(V)
-        with XDMFFile("output/u_h_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write(u_h)
-        result["error"] = errornorm(u_exact, u_h, "H10")
-
-        u_exact_V = interpolate(u_exact, u_h.function_space())
-        u_exact_V.rename("u_exact_V", "u_exact_V")
-        with XDMFFile("output/u_exact_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write(u_exact_V)
+        print('Solving...')
+        u_h = solve(V, u_exact_V)
+        with XDMFFile(MPI.COMM_WORLD, f"output/u_h_{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(u_h)
 
         # Estimate
         print("Estimating...")
         eta_h, e_h = estimate(u_h)
-        with XDMFFile("output/eta_hu_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write_checkpoint(eta_h, "eta_h")
-        with XDMFFile("output/e_h_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write_checkpoint(e_h, "e_h")
-        result["error_bw"] = np.sqrt(eta_h.vector().sum())
+        with XDMFFile(MPI.COMM_WORLD, f"output/eta_hu_{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(eta_h)
+        with XDMFFile(MPI.COMM_WORLD, f"output/e_h_{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(e_h)
+        result['error_bw'] = np.sqrt(np.sum(eta_h.vector.array))
 
         # Exact local error
-        V_e = eta_h.function_space()
-        eta_exact = Function(V_e, name="eta_exact")
-        v = TestFunction(V_e)
-        eta_exact.vector()[:] = assemble(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx(mesh))
-        result["error_exact"] = np.sqrt(eta_exact.vector().sum())
-        with XDMFFile("output/eta_exact_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write(eta_exact)
+        dx = ufl.Measure("dx", domain=mesh.ufl_domain())
+        V_e = eta_h.function_space
+        eta_exact = dolfinx.Function(V_e, name="eta_exact")
+        v = ufl.TestFunction(V_e)
+        eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx)
+        eta_exact.vector.setArray(eta)
+        result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
+        with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
+            fo.write_function(eta_exact)
 
         # Necessary for parallel operation
-        result["hmin"] = comm.reduce(mesh.hmin(), op=mpi4py.MPI.MIN, root=0)
-        result["hmax"] = comm.reduce(mesh.hmax(), op=mpi4py.MPI.MAX, root=0)
-        result["num_dofs"] = V.dim()
+        h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
+            0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
+        h_max = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
+        result['h_max'] = h_max
+        h_min = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
+        result['h_min'] = h_min
+        result['num_dofs'] = V.dofmap.index_map.size_global
 
         # Mark
-        print("Marking...")
-        markers = fenics_error_estimation.dorfler(eta_h, 0.5)
+        print('Marking...')
+        assert(mesh.mpi_comm().size == 1)
+        theta = 0.3
 
-        # and refine.
-        print("Refining...")
-        mesh = refine(mesh, markers, redistribute=True)
+        eta_global = sum(eta_h.vector.array)
+        cutoff = theta * eta_global
 
-        with XDMFFile("output/mesh_{}.xdmf".format(str(i).zfill(4))) as f:
-            f.write(mesh)
+        sorted_cells = np.argsort(eta_h.vector.array)[::-1]
+        rolling_sum = 0.0
+        for i, e in enumerate(eta_h.vector.array[sorted_cells]):
+            rolling_sum += e
+            if rolling_sum > cutoff:
+                breakpoint = i
+                break
+
+        refine_cells = sorted_cells[0:breakpoint + 1]
+        indices = np.array(np.sort(refine_cells), dtype=np.int32)
+        markers = np.zeros(indices.shape, dtype=np.int8)
+        markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
+
+        # Refine
+        print('Refining...')
+        mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
+
+        with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
+            fo.write_mesh(mesh)
 
         results.append(result)
 
-    if (MPI.comm_world.rank == 0):
-        df = pd.DataFrame(results)
-        df.to_pickle("output/results.pkl")
-        print(df)
+    df = pandas.DataFrame.from_dict(results)
+    df.to_pickle("output/results.pkl")
+    print(df)
 
 
-def solve(V):
-    """Entirely standard Poisson solve with non-homogeneous Dirichlet
-    conditions set according to exact solution"""
-    u = TrialFunction(V)
-    v = TestFunction(V)
+def solve(V, u_exact_V):
+    mesh = V.mesh
+    dx = ufl.Measure("dx", domain=mesh)
 
-    f = Constant(0.0)
+    u = ufl.TrialFunction(V)
+    v = ufl.TestFunction(V)
+
+    f = dolfinx.Function(V)  # Zero data
 
     a = inner(grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
-    def all_boundary(x, on_boundary):
-        return on_boundary
+    dbc = dolfinx.Function(V)
+    facets = dolfinx.mesh.locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
+    bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
 
-    bcs = DirichletBC(V, u_exact, all_boundary)
+    A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
+    A.assemble()
 
-    A, b = assemble_system(a, L, bcs=bcs)
+    b = dolfinx.fem.assemble_vector(L)
+    dolfinx.fem.apply_lifting(b, [a], [bcs])
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    dolfinx.fem.set_bc(b, bcs)
 
-    u_h = Function(V, name="u_h")
-    solver = PETScLUSolver("mumps")
-    solver.solve(A, u_h.vector(), b)
+    options = PETSc.Options()
+    options["ksp_type"] = "cg"
+    options["ksp_view"] = None
+    options["pc_type"] = "hypre"
+    options["ksp_rtol"] = 1e-10
+    options["pc_hypre_type"] = "boomeramg"
+    options["ksp_monitor_true_residual"] = None
 
+    u_h = dolfinx.Function(V)
+    solver = PETSc.KSP().create(MPI.COMM_WORLD)
+    solver.setOperators(A)
+    solver.setFromOptions()
+    solver.solve(b, u_h.vector)
+    u_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+                           mode=PETSc.ScatterMode.FORWARD)
     return u_h
 
 
 def estimate(u_h):
-    """Bank-Weiser error estimation procedure"""
-    mesh = u_h.function_space().mesh()
+    mesh = u_h.function_space.mesh
+    ufl_domain = mesh.ufl_domain()
 
-    # Higher order space
-    element_f = FiniteElement("DG", triangle, k + 2)
-    # Low order space
-    element_g = FiniteElement("DG", triangle, k)
+    dx = ufl.Measure('dx', domain=ufl_domain)
+    dS = ufl.Measure('dS', domain=ufl_domain)
 
-    # Construct the Bank-Weiser interpolation operator according to the
-    # definition of the high and low order spaces.
-    N = fenics_error_estimation.create_interpolation(element_f, element_g)
+    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    N = create_interpolation(element_f, element_g)
 
-    V_f = FunctionSpace(mesh, element_f)
+    V_f = ufl.FunctionSpace(ufl_domain, element_f)
+    e = ufl.TrialFunction(V_f)
+    v = ufl.TestFunction(V_f)
 
-    e = TrialFunction(V_f)
-    v = TestFunction(V_f)
+    n = ufl.FacetNormal(ufl_domain)
 
-    f = Constant(0.0)
-
-    # Homogeneous zero Dirichlet boundary conditions
-    bcs = DirichletBC(V_f, Constant(0.0), "on_boundary", "geometric")
-
-    # Define the local Bank-Weiser problem on the full higher order space
-    n = FacetNormal(mesh)
+    # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
-    # Residual
-    L_e = inner(f + div(grad(u_h)), v) * dx + \
-        inner(jump(grad(u_h), -n), avg(v)) * dS
 
-    # Local solves on the implied Bank-Weiser space. The solution is returned
-    # on the full space.
-    e_h = fenics_error_estimation.estimate(a_e, L_e, N, bcs)
+    # Linear form
+    V = u_h.function_space
+    f = dolfinx.Function(V)  # Zero data
+    r = f + div(grad(u_h))
+    L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
-    # Computation of local error indicator using the now classic assemble
-    # tested against DG_0 trick.
-    V_e = FunctionSpace(mesh, "DG", 0)
-    v = TestFunction(V_e)
+    # Error form
+    V_e = dolfinx.FunctionSpace(mesh, element_e)
+    e_h = ufl.Coefficient(V_f)
+    v_e = ufl.TestFunction(V_e)
 
-    eta_h = Function(V_e, name="eta_h")
-    eta = assemble(inner(inner(grad(e_h), grad(e_h)), v) * dx)
-    eta_h.vector()[:] = eta
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
-    return eta_h, e_h
+    V_f = dolfinx.FunctionSpace(mesh, element_f)
+
+    # Function to store result
+    eta_h = dolfinx.Function(V_e)
+    e_h_f = dolfinx.Function(V_f)
+    e_D = dolfinx.Function(V_f)
+
+    # Boundary conditions
+    boundary_entities = dolfinx.mesh.locate_entities_boundary(
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+
+    fenics_error_estimation.estimate(
+        eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
+
+    return eta_h, e_h_f
 
 
 if __name__ == "__main__":
-    main()
-
-
-def test():
     main()

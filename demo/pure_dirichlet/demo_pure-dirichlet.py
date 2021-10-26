@@ -18,7 +18,6 @@ import fenics_error_estimation
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
-from ufl.algorithms.elementtransformations import change_regularity
 
 # Structured mesh
 mesh = RectangleMesh(
@@ -90,6 +89,10 @@ e_h = ufl.Coefficient(V_f)
 v_e = ufl.TestFunction(V_e)
 L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
+# Dirichlet data
+V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+e_D = Function(V_f_dolfin)
+
 # Functions to store results
 eta_h = Function(V_e)
 
@@ -101,7 +104,7 @@ eta_h = Function(V_e)
 facets_sorted = np.sort(facets)
 
 # Estimate the error using the Bank-Weiser approach.
-fenics_error_estimation.estimate(eta_h, u_h, a_e, L_e, L_eta, N, facets_sorted)
+fenics_error_estimation.estimate(eta_h, e_D, a_e, L_e, L_eta, N, facets_sorted)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
