@@ -159,8 +159,8 @@ def estimate_bw(k, u_h, dirichlet_est=False):
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_f = ufl.FiniteElement("DG", ufl.triangle, 3)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, 2)
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     N = create_interpolation(element_f, element_g)
 
