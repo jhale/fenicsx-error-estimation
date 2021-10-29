@@ -18,6 +18,7 @@ URL = ""
 
 REQUIREMENTS = [
     "numpy",
+    "scipy",
     "fenics-dolfinx>=0.1.0",
 ]
 

@@ -11,7 +11,7 @@ find_package(Basix REQUIRED)
 
 find_package(xtensor REQUIRED)
 find_package(xtensor-blas REQUIRED)
-find_package(Python3 REQUIRED Development)
+find_package(Python3 REQUIRED Development NumPy)
 find_package(pybind11 REQUIRED CONFIG HINTS ${PYBIND11_DIR} ${PYBIND11_ROOT}
   $ENV{PYBIND11_DIR} $ENV{PYBIND11_ROOT})
 find_package(xtensor-python REQUIRED)
@@ -32,4 +32,4 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_options(cpp PRIVATE "-fvisibility=default")
 endif()
 
-target_link_libraries(cpp PRIVATE pybind11::module dolfinx)
+target_link_libraries(cpp PRIVATE pybind11::module dolfinx Python3::NumPy)
