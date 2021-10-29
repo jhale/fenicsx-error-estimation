@@ -32,7 +32,7 @@ ffi = cffi.FFI()
 
 
 # Won't try to get it work with complex arithmetic at first
-assert dolfinx.has_petsc_complex == False
+#assert dolfinx.has_petsc_complex == False
 
 def projection(v, V_f):
     mesh = V_f.mesh
@@ -382,7 +382,7 @@ def marking(eta):
 def main():
     k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 15
+    max_it = 20
 
 
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
