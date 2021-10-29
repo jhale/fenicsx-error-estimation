@@ -16,12 +16,9 @@ def create_interpolation(element_f, element_g):
     and V_g.
     """
     assert element_f.cell().cellname() == element_g.cell().cellname()
-    assert element_f.cell().cellname() == "triangle" or element_f.cell().cellname() == "tetrahedron"
-    assert element_f.family() == "Discontinuous Lagrange"
     assert element_f.degree() > element_g.degree()
 
-    ufl_to_basix_cell_map = {"triangle": basix.CellType.triangle, "tetrahedron": basix.CellType.tetrahedron}
-    basix_cell = ufl_to_basix_cell_map[element_f.cell().cellname()]
+    basix_cell = basix.cell.string_to_type(element_f.cell().cellname())
 
     basix_element_f = basix.create_element(basix.ElementFamily.P, basix_cell,
                                            element_f.degree(), basix._basixcpp.LagrangeVariant.equispaced, True)
@@ -29,11 +26,9 @@ def create_interpolation(element_f, element_g):
                                            element_g.degree(), basix._basixcpp.LagrangeVariant.equispaced, True)
 
     # Interpolation element_f to element_g
-    points_g = basix_element_g.points
-    G_1 = basix_element_f.tabulate(0, points_g)[0]
+    G_1 = basix.compute_interpolation_operator(basix_element_f, basix_element_g)
     # and from element_g to element_f
-    points_f = basix_element_f.points
-    G_2 = basix_element_g.tabulate(0, points_f)[0]
+    G_2 = basix.compute_interpolation_operator(basix_element_g, basix_element_f)
 
     # Create a square matrix for interpolation from fine space to coarse one
     # with coarse space seen as a subspace of the fine one

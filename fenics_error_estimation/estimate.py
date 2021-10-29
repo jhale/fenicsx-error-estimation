@@ -53,9 +53,9 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
 
     # Prepare dolfinx.cpp.fem.Form and hold it as a member
     ffi = cffi.FFI()
-    form = dolfinx.cpp.fem.create_form(ffi.cast("uintptr_t", ffi.addressof(ufc_form)),
-                                       function_spaces, coeffs,
-                                       [c._cpp_object for c in form.constants()], subdomains, mesh)
+    form = dolfinx.cpp.fem.create_form_float64(ffi.cast("uintptr_t", ffi.addressof(ufc_form)),
+                                               function_spaces, coeffs,
+                                               [c._cpp_object for c in form.constants()], subdomains, mesh)
 
     return form
 

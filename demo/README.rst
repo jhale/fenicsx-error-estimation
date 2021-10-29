@@ -16,6 +16,9 @@ estimator, pure Neumann boundary conditions. No adaptive mesh refinement.
 ``adaptivity/demo_adaptivity.py`` - 2D L-shaped domain, Bank-Weiser estimator,
 pure Dirichlet conditions, known analytical solution. Adaptive mesh refinement.
 
+TODO for DOLFINx
+================
+
 ``goal_oriented_adaptivity/demo_goal-oriented-adaptivity.py`` - 2D L-shaped
 domain, Bank-Weiser estimator, pure Dirichlet conditions, goal functional, dual
 problem, known analytical solution. Adaptive mesh refinement based on weighted
