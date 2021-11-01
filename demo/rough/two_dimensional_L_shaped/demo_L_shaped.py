@@ -306,7 +306,7 @@ def estimate_zz(u_h, dirichlet_osc=False):
     w_h = ufl.TrialFunction(W)
     v_h = ufl.TestFunction(W)
 
-    a = Form(inner(w_h, v_h) * dx, {'quadrature_rule': 'vertex', 'representation': 'quadrature'})
+    a = Form(inner(w_h, v_h) * dx(metadata={'quadrature_rule': 'vertex', 'representation': 'quadrature'}))
     L = inner(grad(u_h), v_h) * dx
 
     A = assemble_matrix(a)
@@ -446,7 +446,7 @@ def main():
 
         print(f'step {i+1} BW EST. D COMPUTATION...')
         for kg in range(0, 3):
-            for kf in range(kg+1,4):
+            for kf in range(kg+1,5):
                 print(f'kf = {kf}, kg = {kg}')
                 if i == 0:
                     results[f'bw estimator {str(kf)} {str(kg)} D'] = []
@@ -465,7 +465,7 @@ def main():
         
         print(f'step {i+1} BW EST. COMPUTATION...')
         for kg in range(0, 3):
-            for kf in range(kg+1,4):
+            for kf in range(kg+1,5):
                 print(f'kf = {kf}, kg = {kg}')
                 if i == 0:
                     results[f'bw estimator {str(kf)} {str(kg)}'] = []
