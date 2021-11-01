@@ -153,14 +153,14 @@ def exact_error(k, u_h, dirichlet_osc=False):
     return eta_h
 
 
-def estimate_bw(k, u_h, dirichlet_est=False):
+def estimate_bw(k, u_h, kf=2, kg=1, dirichlet_est=False):
     mesh = u_h.function_space.mesh
     V = u_h.function_space
     dx = ufl.Measure("dx", domain=mesh.ufl_domain())
     dS = ufl.Measure("dS", domain=mesh.ufl_domain())
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 3)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 2)
+    element_f = ufl.FiniteElement("DG", ufl.triangle, kf)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, kg)
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     N = create_interpolation(element_f, element_g)
 
@@ -382,7 +382,7 @@ def marking(eta):
 def main():
     k = 1
     OUTPUT_DIR = f'./output/P{str(k)}/'
-    max_it = 20
+    max_it = 15
 
 
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
@@ -399,7 +399,7 @@ def main():
     for d in dirs:
         os.mkdir(os.path.join(OUTPUT_DIR, d))
 
-    results = {'dofs': [], 'true error': [], 'true error D': [], 'bw estimator': [], 'bw estimator D': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': [], 'zz estimator D': []}
+    results = {'dofs': [], 'true error': [], 'true error D': [], 'residual estimator': [], 'residual estimator D': [], 'zz estimator': [], 'zz estimator D': []}
     for i in range(max_it):
         times = {}
         print(f'step {i+1}')
@@ -445,28 +445,42 @@ def main():
         print('true error=', true_err)
 
         print(f'step {i+1} BW EST. D COMPUTATION...')
-        with Timer() as t:
-            eta_bw_D = estimate_bw(k, u, dirichlet_est=True)
-            times['bw estimator D'] = t.elapsed()[0]
+        for kg in range(0, 3):
+            for kf in range(kg+1,4):
+                print(f'kf = {kf}, kg = {kg}')
+                if i == 0:
+                    results[f'bw estimator {str(kf)} {str(kg)} D'] = []
 
-        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_D_{str(i).zfill(4)}.xdmf"), "w") as fo:
-            fo.write_mesh(mesh)
-            fo.write_function(eta_bw_D)
-        bw_est_D = np.sqrt(sum(eta_bw_D.vector.array))
-        results['bw estimator D'].append(bw_est_D)
-        print('bw estimator D =', bw_est_D)
+                with Timer() as t:
+                    eta_bw_D = estimate_bw(k, u, kf=kf, kg=kg, dirichlet_est=True)
+                    times[f'bw estimator {str(kf)} {str(kg)} D'] = t.elapsed()[0]
+
+                bw_est_D = np.sqrt(sum(eta_bw_D.vector.array))
+                results[f'bw estimator {str(kf)} {str(kg)} D'].append(bw_est_D)
+
+                with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(kf)}_{str(kg)}_D_{str(i).zfill(4)}.xdmf"), "w") as fo:
+                    fo.write_mesh(mesh)
+                    fo.write_function(eta_bw_D)
+                print(f'bw estimator {str(kf)} {str(kg)} D =', bw_est_D)
         
         print(f'step {i+1} BW EST. COMPUTATION...')
-        with Timer() as t:
-            eta_bw = estimate_bw(k, u, dirichlet_est=False)
-            times['bw estimator'] = t.elapsed()[0]
+        for kg in range(0, 3):
+            for kf in range(kg+1,4):
+                print(f'kf = {kf}, kg = {kg}')
+                if i == 0:
+                    results[f'bw estimator {str(kf)} {str(kg)}'] = []
 
-        with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
-            fo.write_mesh(mesh)
-            fo.write_function(eta_bw)
-        bw_est = np.sqrt(sum(eta_bw.vector.array))
-        results['bw estimator'].append(bw_est)
-        print('bw estimator =', bw_est)
+                with Timer() as t:
+                    eta_bw = estimate_bw(k, u, kf=kf, kg=kg, dirichlet_est=False)
+                    times[f'bw estimator {str(kf)} {str(kg)}'] = t.elapsed()[0]
+
+                bw_est = np.sqrt(sum(eta_bw.vector.array))
+                results[f'bw estimator {str(kf)} {str(kg)}'].append(bw_est)
+
+                with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"bw_estimators/eta_{str(kf)}_{str(kg)}_{str(i).zfill(4)}.xdmf"), "w") as fo:
+                    fo.write_mesh(mesh)
+                    fo.write_function(eta_bw)
+                print(f'bw estimator {str(kf)} {str(kg)} =', bw_est)
 
         print(f'step {i+1} RESIDUAL EST. D COMPUTATION...')
         with Timer() as t:
@@ -505,7 +519,7 @@ def main():
             print(f'step {i+1} ZZ EST. D COMPUTATION...')
             with Timer() as t:
                 eta_zz_D = estimate_zz(u, dirichlet_osc=True)
-                times['zz estimator'] = t.elapsed()[0]
+                times['zz estimator D'] = t.elapsed()[0]
 
             with XDMFFile(MPI.COMM_WORLD, os.path.join(OUTPUT_DIR, f"zz_estimators/eta_{str(i).zfill(4)}.xdmf"), "w") as fo:
                 fo.write_mesh(mesh)
