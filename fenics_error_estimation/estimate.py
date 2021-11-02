@@ -6,6 +6,7 @@ from mpi4py import MPI
 import cffi
 
 import dolfinx
+import dolfinx.common
 import dolfinx.cpp
 from ufl.algorithms.elementtransformations import change_regularity
 
@@ -80,13 +81,14 @@ def estimate(eta_h, e_D, a_e, L_e, L_eta, N, bc_entities, e_h=None):
     dof_layout = dolfinx.cpp.fem.create_element_dof_layout(
         ffi.cast("uintptr_t", ffi.addressof(cg_dofmap)), mesh.topology.cell_type, [])
 
-    if e_h is None:
-        # This version of the function does not modify the last argument.
-        fenics_error_estimation.cpp.projected_local_solver_no_error_solution(
-            eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object)
-    else:
-        fenics_error_estimation.cpp.projected_local_solver_error_solution(
-            eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object)
+    with dolfinx.common.Timer("Z Error estimation...") as t:
+        if e_h is None:
+            # This version of the function does not modify the last argument.
+            fenics_error_estimation.cpp.projected_local_solver_no_error_solution(
+                eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object)
+        else:
+            fenics_error_estimation.cpp.projected_local_solver_error_solution(
+                eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object)
 
 
 def weighted_estimate(eta_uh, eta_zh):
