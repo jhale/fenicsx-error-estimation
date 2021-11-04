@@ -112,7 +112,7 @@ def estimate_primal(u_h):
     e_D = dolfinx.Function(V_f_dolfin)
     e_h = dolfinx.Function(V_f_dolfin)
 
-    estimate(eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h)
+    estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)

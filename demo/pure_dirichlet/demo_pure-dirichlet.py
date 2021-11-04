@@ -25,7 +25,6 @@ mesh = RectangleMesh(
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
     CellType.triangle)
 
-
 k = 1
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
@@ -89,10 +88,6 @@ e_h = ufl.Coefficient(V_f)
 v_e = ufl.TestFunction(V_e)
 L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
-# Dirichlet data
-V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-e_D = Function(V_f_dolfin)
-
 # Functions to store results
 eta_h = Function(V_e)
 
@@ -104,7 +99,7 @@ eta_h = Function(V_e)
 facets_sorted = np.sort(facets)
 
 # Estimate the error using the Bank-Weiser approach.
-fenics_error_estimation.estimate(eta_h, e_D, a_e, L_e, L_eta, N, facets_sorted)
+fenics_error_estimation.estimate(eta_h, a_e, L_e, L_eta, N, facets_sorted)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

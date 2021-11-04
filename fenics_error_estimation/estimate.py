@@ -61,8 +61,31 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
     return form
 
 
-def estimate(eta_h, e_D, a_e, L_e, L_eta, N, bc_entities, e_h=None):
+def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None):
     """Estimate the error using the Bank-Weiser implicit estimation strategy.
+
+    Parameters
+    ----------
+    eta_h
+        Return argument, the error estimate.
+    a_e
+        Bilinear local form of Bank-Weiser problem.
+    L_e
+        Linear local form of Bank-Weiser problem.
+    L_eta
+        Functional local form to compute norm of local Bank-Weiser solution.
+    N
+        Bank-Weiser projection operator.
+    bc_entities
+        Sorted list of boundary entities on which Dirichlet conditions should be applied.
+    e_h
+        Optional: Return argument, the Bank-Weiser error solution.
+    e_D
+        Optional: Dirichlet data to apply on local Bank-Weiser problems.
+
+    Notes
+    -----
+    Caller must pass both e_h and e_D or neither (None).
     """
     mesh = eta_h.function_space.mesh
     mpi_comm = mesh.mpi_comm()
@@ -82,13 +105,14 @@ def estimate(eta_h, e_D, a_e, L_e, L_eta, N, bc_entities, e_h=None):
         ffi.cast("uintptr_t", ffi.addressof(cg_dofmap)), mesh.topology.cell_type, [])
 
     with dolfinx.common.Timer("Z Error estimation...") as t:
-        if e_h is None:
-            # This version of the function does not modify the last argument.
-            fenics_error_estimation.cpp.projected_local_solver_no_error_solution(
-                eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object)
+        if e_h is not None and e_D is not None:
+            fenics_error_estimation.cpp.projected_local_solver_have_fine_space(
+                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object, e_D._cpp_object)
+        elif e_h is None and e_D is None:
+            fenics_error_estimation.cpp.projected_local_solver_no_fine_space(
+                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object, eta_h._cpp_object)
         else:
-            fenics_error_estimation.cpp.projected_local_solver_error_solution(
-                eta_h._cpp_object, e_D._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object)
+            raise ValueError("Must pass both kwargs e_h and e_D, or neither (None).")
 
 
 def weighted_estimate(eta_uh, eta_zh):
