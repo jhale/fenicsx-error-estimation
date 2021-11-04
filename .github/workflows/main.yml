@@ -1,0 +1,16 @@
+on: [push]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    container: jhale/fenicsx-error-estimation:debug
+    name: CI
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install
+        run: |
+          python3 -m pip install .
+      - name: Run tests
+        run: |
+          cd demos
+          python3 -m pytest -v
