@@ -14,7 +14,7 @@ from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemb
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
-import fenics_error_estimation
+import fenicsx_error_estimation
 
 import ufl
 from ufl import avg, cos, div, dot, dS, dx, grad, inner, jump, pi, sin
@@ -58,7 +58,7 @@ print("True error: {}".format(np.sqrt(error)))
 element_f = ufl.FiniteElement("DG", ufl.triangle, k + 1)
 element_g = ufl.FiniteElement("DG", ufl.triangle, k)
 element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
-N = fenics_error_estimation.create_interpolation(element_f, element_g)
+N = fenicsx_error_estimation.create_interpolation(element_f, element_g)
 
 # The local error estimation problem is written in pure UFL. This allows us to
 # avoid making a dolfinx.FunctionSpace on the high-order discontinuous Galerkin
@@ -92,7 +92,7 @@ eta_h = Function(V_e)
 # As we are solving a Neumann problem we pass an empty list of facet ids so
 # that no Dirichlet conditions are applied to the local Bank-Weiser problems.
 facets = np.array([], dtype=np.int32)
-fenics_error_estimation.estimate(eta_h, a_e, L_e, L_eta, N, facets)
+fenicsx_error_estimation.estimate(eta_h, a_e, L_e, L_eta, N, facets)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

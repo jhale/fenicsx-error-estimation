@@ -11,8 +11,8 @@ from dolfinx.io import XDMFFile
 import ufl
 from ufl import avg, div, grad, inner, jump
 
-import fenics_error_estimation.estimate
-from fenics_error_estimation import create_interpolation
+import fenicsx_error_estimation.estimate
+from fenicsx_error_estimation import create_interpolation
 
 k = 1
 
@@ -199,7 +199,7 @@ def estimate(u_h):
 
     eta_h = dolfinx.Function(V_e)
 
-    fenics_error_estimation.estimate(
+    fenicsx_error_estimation.estimate(
         eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
     return eta_h

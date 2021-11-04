@@ -16,8 +16,7 @@ from dolfinx.fem.assemble import _create_cpp_form
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
-import fenics_error_estimation.cpp
-from fenics_error_estimation import estimate, create_interpolation
+from fenicsx_error_estimation import estimate, create_interpolation
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin

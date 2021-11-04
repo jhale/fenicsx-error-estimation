@@ -10,7 +10,7 @@ import dolfinx.common
 import dolfinx.cpp
 from ufl.algorithms.elementtransformations import change_regularity
 
-import fenics_error_estimation.cpp
+import fenicsx_error_estimation.cpp
 
 ffi = cffi.FFI()
 
@@ -106,10 +106,10 @@ def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None):
 
     with dolfinx.common.Timer("Z Error estimation...") as t:
         if e_h is not None and e_D is not None:
-            fenics_error_estimation.cpp.projected_local_solver_have_fine_space(
+            fenicsx_error_estimation.cpp.projected_local_solver_have_fine_space(
                 eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object, e_D._cpp_object)
         elif e_h is None and e_D is None:
-            fenics_error_estimation.cpp.projected_local_solver_no_fine_space(
+            fenicsx_error_estimation.cpp.projected_local_solver_no_fine_space(
                 eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object, eta_h._cpp_object)
         else:
             raise ValueError("Must pass both kwargs e_h and e_D, or neither (None).")
