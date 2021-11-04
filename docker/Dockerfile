@@ -9,6 +9,7 @@ WORKDIR /src
 
 RUN git clone https://github.com/xtensor-stack/xtensor-blas.git && \
     cd xtensor-blas && \
+    git checkout 0.19.2 && \
     mkdir build && \
     cd build && \
     cmake ../ && \
@@ -26,22 +27,19 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
 
 RUN git clone https://github.com/FEniCS/dolfinx.git && \
     cd dolfinx && git checkout jhale/remove-function-space-check && cd ../ && \
-    git clone --depth 1 https://github.com/FEniCS/ffcx.git && \
-    git clone --depth 1 https://github.com/FEniCS/basix.git && \
-    git clone --depth 1 https://github.com/FEniCS/ufl.git
-
-RUN cd basix && python3 -m pip install . && \
-    cd ../ufl && python3 -m pip install . && \
-    cd ../ffcx && python3 -m pip install .
+    python3 -m pip install pip setuptools --upgrade && \
+    python3 -m pip install git+git://github.com/FEniCS/basix.git && \
+    python3 -m pip install git+git://github.com/FEniCS/ufl.git && \
+    python3 -m pip install git+git://github.com/FEniCS/ffcx.git
 
 ENV PETSC_DIR=/usr/local/petsc
 ENV PETSC_ARCH=linux-gnu-real-32
-RUN cd dolfinx && \
-    mkdir build && \
-    cd build && \
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_FLAGS=${CXXFLAGS} ../cpp && \
-    ninja install && \
-    cd ../python && \
+RUN git clone https://github.com/FEniCS/dolfinx.git && \
+    cd dolfinx && git checkout f6e710 && \
+    cmake -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_FLAGS=${CXXFLAGS} -G Ninja -B build-dir -S cpp && \
+    cmake --build build-dir && \
+    cmake --install build-dir && \
+    cd python && \
     CXXFLAGS=${CXXFLAGS} python3 -m pip -v install --global-option build ${PIP_EXTRA_FLAGS} .
 
 RUN python3 -m pip install pandas matplotlib mpltools
