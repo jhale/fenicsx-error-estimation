@@ -9,8 +9,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install
         run: |
-          python3 -m pip install .
-      - name: Run tests
+          python3 -m pip -v install .
+      - name: Run demos 
         run: |
-          cd demos
+          cd demo
           python3 -m pytest -v
