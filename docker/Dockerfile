@@ -25,17 +25,15 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     make install && \
     rm -rf /src/xtensor-python
 
-RUN git clone https://github.com/FEniCS/dolfinx.git && \
-    cd dolfinx && git checkout jhale/remove-function-space-check && cd ../ && \
-    python3 -m pip install pip setuptools --upgrade && \
-    python3 -m pip install git+git://github.com/FEniCS/basix.git && \
-    python3 -m pip install git+git://github.com/FEniCS/ufl.git && \
-    python3 -m pip install git+git://github.com/FEniCS/ffcx.git
+RUN python3 -m pip install pip setuptools --upgrade && \
+    python3 -m pip install git+git://github.com/FEniCS/basix.git@main && \
+    python3 -m pip install git+git://github.com/FEniCS/ufl.git@main && \
+    python3 -m pip install git+git://github.com/FEniCS/ffcx.git@main
 
 ENV PETSC_DIR=/usr/local/petsc
 ENV PETSC_ARCH=linux-gnu-real-32
 RUN git clone https://github.com/FEniCS/dolfinx.git && \
-    cd dolfinx && git checkout f6e710 && \
+    cd dolfinx && git checkout jhale/remove-function-space-check && \
     cmake -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_FLAGS=${CXXFLAGS} -G Ninja -B build-dir -S cpp && \
     cmake --build build-dir && \
     cmake --install build-dir && \
