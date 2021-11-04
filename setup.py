@@ -13,13 +13,13 @@ if sys.version_info < (3, 7):
     print("Python 3.7 or higher required, please upgrade.")
     sys.exit(1)
 
-VERSION = "0.1.0"
+VERSION = "0.3.0.dev0"
 URL = ""
 
 REQUIREMENTS = [
     "numpy",
     "scipy",
-    "fenics-dolfinx>=0.1.0",
+    "fenics-dolfinx>=0.3.0.dev0",
 ]
 
 AUTHORS = """\
@@ -71,7 +71,7 @@ class CMakeBuild(build_ext):
 
         env = os.environ.copy()
         import pybind11
-        env['pybind11_DIR'] = pybind11.get_cmake_dir() 
+        env['pybind11_DIR'] = pybind11.get_cmake_dir()
         env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', ''))
 
         if not os.path.exists(self.build_temp):
@@ -81,8 +81,8 @@ class CMakeBuild(build_ext):
 
 
 def run_install():
-    setup(name="fenics_error_estimation",
-          description="Implicit and a posteriori error estimates in FEniCS",
+    setup(name="fenicsx_error_estimation",
+          description="Implicit and a posteriori error estimates in FEniCSx",
           version=VERSION,
           author=AUTHORS,
           classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
@@ -90,9 +90,9 @@ def run_install():
           author_email="mail@jackhale.co.uk",
           maintainer_email="mail@jackhale.co.uk",
           url=URL,
-          packages=["fenics_error_estimation"],
-          package_dir={"fenics_error_estimation": "fenics_error_estimation"},
-          ext_modules=[CMakeExtension("fenics_error_estimation.cpp", sourcedir="./fenics_error_estimation/cpp/")],
+          packages=["fenicsx_error_estimation"],
+          package_dir={"fenicsx_error_estimation": "fenicsx_error_estimation"},
+          ext_modules=[CMakeExtension("fenicsx_error_estimation.cpp", sourcedir="./fenicsx_error_estimation/cpp/")],
           cmdclass=dict(build_ext=CMakeBuild),
           platforms=["Linux", "Mac OS-X", "Unix"],
           install_requires=REQUIREMENTS,

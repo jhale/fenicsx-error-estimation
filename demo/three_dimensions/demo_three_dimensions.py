@@ -16,8 +16,7 @@ from dolfinx.fem.assemble import _create_cpp_form
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
-import fenics_error_estimation.cpp
-from fenics_error_estimation import estimate, create_interpolation
+from fenicsx_error_estimation import estimate, create_interpolation
 
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
@@ -25,7 +24,7 @@ from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
 
-k = 2
+k = 2 
 
 
 def primal():
@@ -124,16 +123,12 @@ def estimate_primal(u_h):
     # Functions to store results
     eta_h = Function(V_e)
 
-    # Dirichlet data
-    V_f_dolfin = dolfinx.FunctionSpace(mesh, ufl.FiniteElement("DG", ufl.tetrahedron, k + 1))
-    e_D = Function(V_f_dolfin)
-
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    estimate(eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities_sorted)
+    estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

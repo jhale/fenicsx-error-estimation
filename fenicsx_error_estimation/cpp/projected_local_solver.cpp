@@ -23,16 +23,14 @@ namespace py = pybind11;
 
 using namespace dolfinx;
 
-template <typename T, bool compute_error_solution = false>
-void projected_local_solver(fem::Function<T>& eta_h,
-                            const fem::Function<T>& e_D_h,
-                            const fem::Form<T>& a, const fem::Form<T>& L,
-                            const fem::Form<T>& L_eta,
-                            const fem::FiniteElement& element,
-                            const fem::ElementDofLayout& element_dof_layout,
-                            const xt::pytensor<T, 2>& N,
-                            const xt::pytensor<std::int32_t, 1>& entities,
-                            fem::Function<T>& e_h)
+template <typename T, bool have_fine_space = false>
+void projected_local_solver(
+    fem::Function<T>& eta_h, const fem::Form<T>& a, const fem::Form<T>& L,
+    const fem::Form<T>& L_eta, const fem::FiniteElement& element,
+    const fem::ElementDofLayout& element_dof_layout,
+    const xt::pytensor<T, 2>& N, const xt::pytensor<std::int32_t, 1>& entities,
+    fem::Function<T>& e_h,         // Not used if have_fine_space == false
+    const fem::Function<T>& e_D_h) // Not used if have_fine_space == false
 {
   const auto mesh = a.mesh();
   assert(mesh == L.mesh());
@@ -275,7 +273,14 @@ void projected_local_solver(fem::Function<T>& eta_h,
           xt::row(Ae, dof) = 0.0;
           xt::col(Ae, dof) = 0.0;
           Ae(dof, dof) = 1.0;
-          be(dof) = e_D[e_D_dofs[dof]];
+          if constexpr (have_fine_space)
+          {
+            be(dof) = e_D[e_D_dofs[dof]];
+          }
+          else
+          {
+            be(dof) = 0.0;
+          }
         }
       }
     }
@@ -297,7 +302,7 @@ void projected_local_solver(fem::Function<T>& eta_h,
     const auto dofs_eta = dofmap_eta.links(c);
     eta[dofs_eta[0]] = etae(0);
 
-    if constexpr (compute_error_solution)
+    if constexpr (have_fine_space)
     {
       const auto dofs_e = dofmap_e.links(c);
       for (std::size_t i = 0; i < dofs_e.size(); ++i)
@@ -311,12 +316,14 @@ void projected_local_solver(fem::Function<T>& eta_h,
 PYBIND11_MODULE(cpp, m)
 {
   xt::import_numpy();
-  m.def("projected_local_solver_error_solution",
+  m.def("projected_local_solver_have_fine_space",
         &projected_local_solver<PetscScalar, true>,
         "Local solves on projected finite element space. Computes Bank-Weiser "
-        "error solution.")
-      .def("projected_local_solver_no_error_solution",
+        "error solution. Allows imposition of Dirichlet boundary conditions "
+        "on Bank-Weiser error solution.")
+      .def("projected_local_solver_no_fine_space",
            &projected_local_solver<PetscScalar, false>,
            "Local solves on projected finite element space. Does not compute "
-           "Bank-Weiser error solution.");
+           "Bank-Weiser error solution. Dirichlet condition on Bank-Weiser "
+           "error solution is always zero.");
 }

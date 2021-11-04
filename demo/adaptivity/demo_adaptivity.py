@@ -11,8 +11,8 @@ from dolfinx.io import XDMFFile
 import ufl
 from ufl import avg, div, grad, inner, jump
 
-import fenics_error_estimation.estimate
-from fenics_error_estimation import create_interpolation
+import fenicsx_error_estimation.estimate
+from fenicsx_error_estimation import create_interpolation
 
 k = 1
 
@@ -52,13 +52,10 @@ def main():
 
         # Estimate
         print("Estimating...")
-        eta_h, e_h = estimate(u_h)
+        eta_h = estimate(u_h)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_hu_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_h)
-        with XDMFFile(MPI.COMM_WORLD, f"output/e_h_{str(i).zfill(4)}.xdmf", "w") as fo:
-            fo.write_mesh(mesh)
-            fo.write_function(e_h)
         result['error_bw'] = np.sqrt(np.sum(eta_h.vector.array))
 
         # Exact local error
@@ -195,21 +192,17 @@ def estimate(u_h):
 
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
-    V_f = dolfinx.FunctionSpace(mesh, element_f)
-
-    # Function to store result
-    eta_h = dolfinx.Function(V_e)
-    e_h_f = dolfinx.Function(V_f)
-    e_D = dolfinx.Function(V_f)
-
     # Boundary conditions
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+    boundary_entities_sorted = np.sort(boundary_entities)
 
-    fenics_error_estimation.estimate(
-        eta_h, e_D, a_e, L_e, L_eta, N, boundary_entities, e_h=e_h_f)
+    eta_h = dolfinx.Function(V_e)
 
-    return eta_h, e_h_f
+    fenicsx_error_estimation.estimate(
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
+
+    return eta_h
 
 
 if __name__ == "__main__":
