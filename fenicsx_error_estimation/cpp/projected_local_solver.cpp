@@ -266,7 +266,7 @@ void projected_local_solver(
             Ae(dof, dof) = diagonal;
             if constexpr (have_fine_space)
             {
-              be(dof) = e_D[e_D_dofs[dof]];
+              be(dof) = diagonal*e_D[e_D_dofs[dof]];
             }
             else
             {

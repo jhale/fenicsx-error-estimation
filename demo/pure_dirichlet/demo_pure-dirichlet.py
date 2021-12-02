@@ -22,10 +22,10 @@ from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
     CellType.triangle)
 
-k = 2
+k = 1
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
