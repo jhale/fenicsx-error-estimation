@@ -30,7 +30,8 @@ void projected_local_solver(
     const fem::ElementDofLayout& element_dof_layout,
     const xt::pytensor<T, 2>& N, const xt::pytensor<std::int32_t, 1>& entities,
     fem::Function<T>& e_h,         // Not used if have_fine_space == false
-    const fem::Function<T>& e_D_h) // Not used if have_fine_space == false
+    const fem::Function<T>& e_D_h, // Not used if have_fine_space == false
+    double diagonal = 1.0)
 {
   const auto mesh = a.mesh();
   assert(mesh == L.mesh());
@@ -249,8 +250,6 @@ void projected_local_solver(
     // Apply boundary conditions.
     if (cell_on_boundary)
     {
-      xt::xtensor<bool, 1> dofs_on_dirichlet_bc
-          = xt::zeros<bool>({element_space_dimension});
       for (int local_facet = 0; local_facet < num_facets; ++local_facet)
       {
         const std::int32_t f = c_f[local_facet];
@@ -261,25 +260,18 @@ void projected_local_solver(
               = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
           for (std::size_t k = 0; k < local_dofs.size(); ++k)
           {
-            dofs_on_dirichlet_bc[local_dofs[k]] = true;
-          }
-        }
-      }
-
-      for (int dof = 0; dof < element_space_dimension; ++dof)
-      {
-        if (dofs_on_dirichlet_bc[dof] == true)
-        {
-          xt::row(Ae, dof) = 0.0;
-          xt::col(Ae, dof) = 0.0;
-          Ae(dof, dof) = 1.0;
-          if constexpr (have_fine_space)
-          {
-            be(dof) = e_D[e_D_dofs[dof]];
-          }
-          else
-          {
-            be(dof) = 0.0;
+            int dof = local_dofs[k];
+            xt::row(Ae, dof) = 0.0;
+            xt::col(Ae, dof) = 0.0;
+            Ae(dof, dof) = diagonal;
+            if constexpr (have_fine_space)
+            {
+              be(dof) = diagonal*e_D[e_D_dofs[dof]];
+            }
+            else
+            {
+              be(dof) = 0.0;
+            }
           }
         }
       }

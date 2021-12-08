@@ -61,7 +61,7 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
     return form
 
 
-def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None):
+def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None, diagonal=1.0):
     """Estimate the error using the Bank-Weiser implicit estimation strategy.
 
     Parameters
@@ -82,6 +82,8 @@ def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None):
         Optional: Return argument, the Bank-Weiser error solution.
     e_D
         Optional: Dirichlet data to apply on local Bank-Weiser problems.
+    diagonal
+        Optional: Scaling on diagonal entry for Dirichlet boundary condition application.
 
     Notes
     -----
@@ -107,10 +109,10 @@ def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None):
     with dolfinx.common.Timer("Z Error estimation...") as t:
         if e_h is not None and e_D is not None:
             fenicsx_error_estimation.cpp.projected_local_solver_have_fine_space(
-                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object, e_D._cpp_object)
+                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, e_h._cpp_object, e_D._cpp_object, diagonal)
         elif e_h is None and e_D is None:
             fenicsx_error_estimation.cpp.projected_local_solver_no_fine_space(
-                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object, eta_h._cpp_object)
+                eta_h._cpp_object, a_e_dolfin, L_e_dolfin, L_eta_dolfin, element, dof_layout, N, bc_entities, eta_h._cpp_object, eta_h._cpp_object, diagonal)
         else:
             raise ValueError("Must pass both kwargs e_h and e_D, or neither (None).")
 
