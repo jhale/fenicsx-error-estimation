@@ -56,7 +56,7 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_hu_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_h)
-        result['error_bw'] = np.sqrt(np.sum(eta_h.vector.array))
+        result['error_bw'] = np.sqrt(eta_h.vector.sum())
 
         # Exact local error
         dx = ufl.Measure("dx", domain=mesh.ufl_domain())
@@ -65,7 +65,7 @@ def main():
         v = ufl.TestFunction(V_e)
         eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx)
         eta_exact.vector.setArray(eta)
-        result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
+        result['error'] = np.sqrt(eta.sum())
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_exact)
@@ -73,9 +73,9 @@ def main():
         # Necessary for parallel operation
         h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
             0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
-        h_max = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
+        h_max = MPI.COMM_WORLD.allreduce(np.max(h_local), op=MPI.MAX)
         result['h_max'] = h_max
-        h_min = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
+        h_min = MPI.COMM_WORLD.allreduce(np.min(h_local), op=MPI.MIN)
         result['h_min'] = h_min
         result['num_dofs'] = V.dofmap.index_map.size_global
 
@@ -149,8 +149,8 @@ def estimate(u_h):
     dx = ufl.Measure('dx', domain=ufl_domain)
     dS = ufl.Measure('dS', domain=ufl_domain)
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_f = ufl.FiniteElement("DG", ufl.triangle, k + 1)
+    element_g = ufl.FiniteElement("DG", ufl.triangle, k)
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     N = create_interpolation(element_f, element_g)
 
