@@ -1,5 +1,58 @@
-# Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
+# Copyright 2019-2021, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import numpy as np
+from mpi4py import MPI
+import dolfinx.mesh
+
+def dorfler(eta_h, theta):
+    """Equilibriated marking strategy of Dörfler.
+
+    Marks the smallest set of cells such that the sum of the squared errors of
+    the set is greater than theta times the total squared error.
+    """
+    raise NotImplementedError
+
+
+def maximum(eta_h, theta):
+    """Maximum marking strategy.
+    
+    Marks every cell with error greater than the maximum error times theta."""
+    mesh = eta_h.function_space.mesh
+    comm = eta_h.function_space.mesh.mpi_comm()
+    dofmap = eta_h.function_space.dofmap
+
+    etas = eta_h.x
+    eta_max_local = np.max(etas.array)
+    eta_max_global = comm.allreduce(eta_max_local, op=MPI.MAX)
+    frac = theta * eta_max_global
+
+    indices = np.where(etas.array > frac)[0]
+    markers = np.ones(indices.shape, dtype=np.int8)
+    markers_tag = dolfinx.mesh.MeshTags(mesh, mesh.topology.dim, indices, markers)
+
+    return markers_tag
+
+
+#    mesh = eta_h.function_space().mesh()
+#    V = eta_h.function_space()
+#    dofmap = V.dofmap()
+#
+#    etas = MeshFunction("double", mesh, mesh.topology().dim(), 0.0)
+#    for c in cells(mesh):
+#        etas[c] = eta_h.vector()[dofmap.cell_dofs(c.index())]
+#
+#    eta_max = eta_h.vector().max()
+#    frac = theta * eta_max
+#
+#    markers = MeshFunction("bool", mesh, mesh.geometry().dim(), False)
+#    marked = np.zeros_like(etas.array(), dtype=np.bool)
+#    marked[np.where(etas.array() > frac)] = True
+#    markers.set_values(marked)
+#
+#    return markers
+#def 
+     
+
 #import numpy as np
 #import mpi4py.MPI as MPI
 #from dolfin import MeshFunction, cells

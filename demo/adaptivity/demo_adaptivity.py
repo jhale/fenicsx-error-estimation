@@ -12,7 +12,7 @@ import ufl
 from ufl import avg, div, grad, inner, jump
 
 import fenicsx_error_estimation.estimate
-from fenicsx_error_estimation import create_interpolation
+from fenicsx_error_estimation import create_interpolation, maximum
 
 k = 1
 
@@ -81,24 +81,8 @@ def main():
 
         # Mark
         print('Marking...')
-        assert(mesh.mpi_comm().size == 1)
         theta = 0.3
-
-        eta_global = sum(eta_h.vector.array)
-        cutoff = theta * eta_global
-
-        sorted_cells = np.argsort(eta_h.vector.array)[::-1]
-        rolling_sum = 0.0
-        for i, e in enumerate(eta_h.vector.array[sorted_cells]):
-            rolling_sum += e
-            if rolling_sum > cutoff:
-                breakpoint = i
-                break
-
-        refine_cells = sorted_cells[0:breakpoint + 1]
-        indices = np.array(np.sort(refine_cells), dtype=np.int32)
-        markers = np.zeros(indices.shape, dtype=np.int8)
-        markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
+        markers_tag = maximum(eta_h, theta)
 
         # Refine
         print('Refining...')
