@@ -7,28 +7,24 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 import dolfinx
-from dolfinx import cpp
 from dolfinx import DirichletBC, Function, FunctionSpace, UnitCubeMesh
-from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
+from dolfinx.common import Timer
+from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar,
                          locate_dofs_topological, set_bc)
-from dolfinx.fem.assemble import _create_cpp_form
-from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
 from fenicsx_error_estimation import estimate, create_interpolation
 
 import ufl
-from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
-from ufl.algorithms.elementtransformations import change_regularity
+from ufl import avg, div, grad, inner, jump, pi, sin
 
 ffi = cffi.FFI()
 
-k = 2 
+k = 2
 
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 16, 16, 16)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 256, 256, 256)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, k)
     V = FunctionSpace(mesh, element)
@@ -49,13 +45,19 @@ def primal():
     dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
-    A = assemble_matrix(a, bcs=bcs)
-    A.assemble()
+    a_dolfin = dolfinx.Form(a)
+    with Timer("Z Assemble matrix") as t:
+        A = assemble_matrix(a_dolfin, bcs=bcs)
+        A.assemble()
 
-    b = assemble_vector(L)
-    apply_lifting(b, [a], [bcs])
-    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-    set_bc(b, bcs)
+    L_dolfin = dolfinx.Form(L)
+    with Timer("Z Assemble vector") as t:
+        b = assemble_vector(L_dolfin)
+
+    with Timer("Z Apply Dirichlet BCs") as t:
+        apply_lifting(b, [a_dolfin], [bcs])
+        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+        set_bc(b, bcs)
 
     u = Function(V)
     solver = PETSc.KSP().create(MPI.COMM_WORLD)
@@ -73,16 +75,18 @@ def primal():
     PETSc.Options()["ksp_view"] = ""
     solver.setOperators(A)
     solver.setFromOptions()
-    solver.solve(b, u.vector)
-    u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
-    with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(u)
+    with Timer("Z Solve") as t:
+        solver.solve(b, u.vector)
+
+    with Timer("Z Ghost update") as t:  # noqa: F841
+        u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
     u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1]) * sin(2.0 * pi * x[2])
-    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
-    print("True error: {}".format(np.sqrt(error)))
+    local_error = assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=k + 3))
+    error = mesh.mpi_comm().allreduce(local_error, op=MPI.SUM)
+    if (MPI.COMM_WORLD.rank == 0):
+        print("True error: {}".format(np.sqrt(error)))
 
     return u
 
@@ -111,7 +115,6 @@ def estimate_primal(u_h):
     a_e = inner(grad(e), grad(v)) * dx
 
     # Linear form
-    V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
     L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx(degree=k + 2)
 
     # Error form
@@ -130,16 +133,15 @@ def estimate_primal(u_h):
 
     estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
-
-    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
-        of.write_mesh(mesh)
-        of.write_function(eta_h)
+    bank_weiser_error = np.sqrt(eta_h.vector.sum())
+    if (MPI.COMM_WORLD.rank == 0):
+        print(f"Bank-Weiser error from estimator: {bank_weiser_error}")
 
 
 def main():
     u = primal()
     estimate_primal(u)
+    dolfinx.common.list_timings(MPI.COMM_WORLD, [dolfinx.cpp.common.TimingType.wall])
 
 
 if __name__ == "__main__":
