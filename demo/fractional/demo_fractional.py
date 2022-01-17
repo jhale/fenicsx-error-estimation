@@ -31,6 +31,42 @@ tol = 1e-3
 # Dorfler marking parameter
 theta = 0.3
 
+'''
+bp_sum generates the parameters for the rational sum.
+Parameters:
+    lmbda: eigenvalue at which the sum is evaluated
+    kappa: fineness parameter
+    s: fractional power
+Returns:
+    q: value of the rational sum at lmbda
+    c_1s: diffusion coefficients of the rational sum
+    c_2s: reaction coefficients of the rational sum
+    weights: multiplicative coefficients of the rational sum
+    constant: multiplicative constant in front of the sum
+'''
+def bp_sum(lmbda, kappa, s):
+    M = np.ceil((np.pi**2)/(4.*s*kappa**2))
+    N = np.ceil((np.pi**2)/(4.*(1.-s)*kappa**2))
+
+    constant = (2.*np.sin(np.pi*s)*k)/np.pi
+
+    ls = np.arange(-M, N+1, 1)
+    num_param_pbms = len(ls)
+    q = 0.
+    c_1s = []
+    c_2s = []
+    weights = []
+    for l in ls:
+        c_1 = np.exp(2.*kappa*l)
+        c_1s.append(c_1)
+        c_2 = 1.
+        c_2s.append(c_2)
+        weight = np.exp(2.*s*kappa*l)
+        weights.append(weight)
+        q += weight/(c_2+c_1*lmbda)
+    q *= constant
+    return q, c_1s, c_2s, weights, constant
+
 # Structured mesh
 mesh = RectangleMesh(
         MPI.COMM_WORLD,
@@ -44,12 +80,13 @@ def f_e(x):
 l2_norm_data = 1.
 
 # Generates rational sum parameters s.t. rational approx. error < tol * 1e-3 * l2_norm_data
-rational_param(tol, s, lmbda_0, l2_norm_data)
-
-c_1s = np.load("./rational_sum_parameters/c_1s.npy")
-c_2s = np.load("./rational_sum_parameters/c_2s.npy")
-weights = np.load("./rational_sum_parameters/weights.npy")
-constant = np.load("./rational_sum_parameters/constant.npy")
+tol_rs = tol * 1e-3 * l2_norm_data
+kappas = np.flip(np.arange(1e-2, 1., step=0.01))
+for kappa in kappas:
+    q, c_1s, c_2s, weights, constant = bp_sum(lmbda_0, kappa, s)
+    diff = np.abs(lmbda_0 ** (-s) - q)
+    if np.less(diff, tol_rs):
+        break
 
 # Initialize estimator value
 eta = 1.
