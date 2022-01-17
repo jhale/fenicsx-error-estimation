@@ -6,7 +6,7 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 import dolfinx
-from dolfinx import cpp, Constant, form
+from dolfinx import cpp, Constant
 from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
 from dolfinx.cpp.mesh import CellType
 from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
@@ -28,7 +28,7 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data)
 tol = 1e-3
-# DÃrfler marking parameter
+# Dorfler marking parameter
 theta = 0.3
 
 # Structured mesh
@@ -95,8 +95,8 @@ while np.greater(eta, tol):
     u_est = Coefficient(V)  #FIXME: see with Jack how to update Coeff in the loop
     e_h = Coefficient(V_f)
 
-    a_form = form(cst_1 * inner(grad(u), grad(v)) * dx + cst_2 * inner(u, v) * dx)
-    L_form = form(inner(f, v) * dx)
+    a_form = Form(cst_1 * inner(grad(u), grad(v)) * dx + cst_2 * inner(u, v) * dx)
+    L_form = Form(inner(f, v) * dx)
 
     # a_e_form = form(cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx)
     # L_e_form = form(inner(f + cst_1 * div(grad(u_est)) - cst_2 * u_est, v_f) * dx\
@@ -158,11 +158,11 @@ while np.greater(eta, tol):
         '''
         A posteriori error estimation
         '''
-        a_e_form = form(cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx)
-        L_e_form = form(inner(f + cst_1 * div(grad(u_h)) - cst_2 * u_h, v_f) * dx\
+        a_e_form = Form(cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx)
+        L_e_form = Form(inner(f + cst_1 * div(grad(u_h)) - cst_2 * u_h, v_f) * dx\
                 + inner(cst_1 * jump(grad(u_h), -n), avg(v_f)) * dS)
 
-        L_eta = form(inner(inner(e_h, e_h), v_e) * dx)
+        L_eta = Form(inner(inner(e_h, e_h), v_e) * dx)
 
         # Functions to store results
         eta_h = Function(V_e)   # L2 norm of parametric BW solution (not used here)
