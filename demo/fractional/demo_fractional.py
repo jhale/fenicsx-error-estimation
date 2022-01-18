@@ -15,7 +15,6 @@ from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
 import fenicsx_error_estimation
-from rational_sum_parameters import rational_param
 
 import ufl
 from ufl import avg, div, grad, inner, jump, Measure, TrialFunction, TestFunction, FacetNormal, Coefficient
@@ -48,7 +47,7 @@ def bp_sum(lmbda, kappa, s):
     M = np.ceil((np.pi**2)/(4.*s*kappa**2))
     N = np.ceil((np.pi**2)/(4.*(1.-s)*kappa**2))
 
-    constant = (2.*np.sin(np.pi*s)*k)/np.pi
+    constant = (2.*np.sin(np.pi*s)*kappa)/np.pi
 
     ls = np.arange(-M, N+1, 1)
     num_param_pbms = len(ls)
@@ -70,7 +69,7 @@ def bp_sum(lmbda, kappa, s):
 # Structured mesh
 mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
+        [np.array([0, 0, 0]), np.array([np.pi, np.pi, 0])], [4, 4],
         CellType.triangle)
 
 # Input data
@@ -111,7 +110,7 @@ while np.greater(eta, tol):
     v_e = TestFunction(V_e)
 
     # Initialize BW estimator interpolation matrix
-    N = fenics_error_estimation.create_interpolation(element_f, element_g)
+    N = fenicsx_error_estimation.create_interpolation(element_f, element_g)
 
     # Measures and normal
     dx = Measure("dx", domain=mesh)
@@ -125,15 +124,10 @@ while np.greater(eta, tol):
     # Initialize bilinear and linear forms
     cst_1 = Constant(mesh, 0.)
     cst_2 = Constant(mesh, 0.)
-    u_est = Coefficient(V)  #FIXME: see with Jack how to update Coeff in the loop
     e_h = Coefficient(V_f)
 
     a_form = Form(cst_1 * inner(grad(u), grad(v)) * dx + cst_2 * inner(u, v) * dx)
     L_form = Form(inner(f, v) * dx)
-
-    # a_e_form = form(cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx)
-    # L_e_form = form(inner(f + cst_1 * div(grad(u_est)) - cst_2 * u_est, v_f) * dx\
-    #         + inner(cst_1 * jump(grad(u_est), -n), avg(v_f)) * dS)
 
     # Homogeneous zero Dirichlet boundary condition
     u0 = Function(V)
@@ -194,9 +188,9 @@ while np.greater(eta, tol):
         '''
         A posteriori error estimation
         '''
-        a_e_form = Form(cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx)
-        L_e_form = Form(inner(f + cst_1 * div(grad(u_h)) - cst_2 * u_h, v_f) * dx\
-                + inner(cst_1 * jump(grad(u_h), -n), avg(v_f)) * dS)
+        a_e_form = cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx
+        L_e_form = inner(f + cst_1 * div(grad(u_h)) - cst_2 * u_h, v_f) * dx\
+                + inner(cst_1 * jump(grad(u_h), -n), avg(v_f)) * dS
 
         L_eta = inner(inner(e_h, e_h), v_e) * dx
 
@@ -206,7 +200,7 @@ while np.greater(eta, tol):
         e_D = Function(V_f)     # Zero dirichlet boundary condition
 
         print(f'Ref. step {ref_step} Param. pbm {i} Estimate...')
-        fenics_error_estimation.estimate(
+        fenicsx_error_estimation.estimate(
                 eta_h, a_e_form, L_e_form, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D, diagonal=max(1., cst_1.value))
 
         bw_f.vector.axpy(weight, e_h_f.vector)
@@ -214,27 +208,46 @@ while np.greater(eta, tol):
     # Scale fractional solution and save
     print(f'Ref. step {ref_step} Solution computation and solve...')
     u_h.vector.scale(constant)
-    with XDMFFile(MPI.COMM_WORLD, "./output/u_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(MPI.COMM_WORLD, f"./output/u_{str(ref_step)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(u_h)
 
     # Scale Bank-Weiser solution
     print(f'Ref. step {ref_step} Estimator computation and solve...')
     bw_f.vector.scale(constant)
+    with XDMFFile(MPI.COMM_WORLD, f"./output/bw_{str(ref_step)}.xdmf", "w") as fo:
+        fo.write_mesh(mesh)
+        fo.write_function(bw_f)
+
 
     # Compute L2 error estimator DG0 function and save
     eta_f = assemble_vector(inner(inner(bw_f, bw_f), v_e) * dx)
     eta_e.vector.setArray(eta_f)
-    with XDMFFile(MPI.COMM_WORLD, "./output/eta_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(MPI.COMM_WORLD, f"./output/eta_{str(ref_step)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(eta_e)
 
     # Compute L2 error estimator
-    eta = np.sqrt(sum(eta_e.vector.array()))
+    eta = np.sqrt(sum(eta_e.vector.array))
+    print('BW estimator =', eta)
 
     # Marking
     print(f'Ref. step {ref_step} Marking...')
-    markers_tag = dorfler(mesh, eta_e, theta)
+    eta_global = eta**2
+    cutoff = theta * eta_global
+
+    sorted_cells = np.argsort(eta_e.vector.array)[::-1]
+    rolling_sum = 0.0
+    for i, e in enumerate(eta_e.vector.array[sorted_cells]):
+        rolling_sum += e
+        if rolling_sum > cutoff:
+            breakpoint = i
+            break
+
+    refine_cells = sorted_cells[0:breakpoint + 1]
+    indices = np.array(np.sort(refine_cells), dtype=np.int32)
+    markers = np.zeros(indices.shape, dtype=np.int8)
+    markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
 
     # Refine mesh
     print(f'Ref. step {ref_step} Refinement...')
