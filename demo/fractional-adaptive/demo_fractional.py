@@ -69,12 +69,14 @@ def bp_sum(lmbda, kappa, s):
 # Structured mesh
 mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([np.pi, np.pi, 0])], [4, 4],
+        [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
         CellType.triangle)
 
 # Input data
 def f_e(x):
-    values = (2./np.pi) * np.sin(x[0]) * np.sin(x[1])
+    values = np.ones(x.shape[1])
+    values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
+    values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
     return values
 l2_norm_data = 1.
 
@@ -189,8 +191,8 @@ while np.greater(eta, tol):
         A posteriori error estimation
         '''
         a_e_form = cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx
-        L_e_form = inner(f + cst_1 * div(grad(u_h)) - cst_2 * u_h, v_f) * dx\
-                + inner(cst_1 * jump(grad(u_h), -n), avg(v_f)) * dS
+        L_e_form = inner(f + cst_1 * div(grad(u_param)) - cst_2 * u_param, v_f) * dx\
+                + inner(cst_1 * jump(grad(u_param), -n), avg(v_f)) * dS
 
         L_eta = inner(inner(e_h, e_h), v_e) * dx
 
