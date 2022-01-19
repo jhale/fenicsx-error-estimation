@@ -2,70 +2,64 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 
-from mpi4py import MPI
-from petsc4py import PETSc
-
 import dolfinx
-from dolfinx import cpp, Constant
-from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
+from dolfinx import Constant, DirichletBC, Function, FunctionSpace, RectangleMesh
 from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
+from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, Form,
                          locate_dofs_topological, set_bc)
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import locate_entities_boundary
 
+from mpi4py import MPI
+from petsc4py import PETSc
+
 import fenicsx_error_estimation
 
 import ufl
-from ufl import avg, div, grad, inner, jump, Measure, TrialFunction, TestFunction, FacetNormal, Coefficient
+from ufl import avg, div, grad, inner, jump, Measure, TrialFunction, TestFunction, Coefficient
 
 # Fractional power (in (0, 1))
 s = 0.5
-# Lower bound spectrum
+# Lower bound on spectrum of the Laplacian operator on square
 lmbda_0 = 1.
 # Finite element degree
 k = 1
-# Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data)
+# Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
+# tolerance for FE will be tol)
 tol = 1e-3
 # Dorfler marking parameter
 theta = 0.3
 
-'''
-bp_sum generates the parameters for the rational sum.
-Parameters:
-    lmbda: eigenvalue at which the sum is evaluated
-    kappa: fineness parameter
-    s: fractional power
-Returns:
-    q: value of the rational sum at lmbda
-    c_1s: diffusion coefficients of the rational sum
-    c_2s: reaction coefficients of the rational sum
-    weights: multiplicative coefficients of the rational sum
-    constant: multiplicative constant in front of the sum
-'''
-
 
 def bp_sum(lmbda, kappa, s):
+    """
+    Generates the parameters for the rational sum according to exponentially
+    convergent scheme in Bonito and Pasciak 2013.
+
+    Parameters:
+        lmbda: eigenvalue at which the sum is evaluated
+        kappa: fineness parameter
+        s: fractional power
+
+    Returns:
+        q: value of the rational sum at lmbda
+        c_1s: diffusion coefficients of the rational sum
+        c_2s: reaction coefficients of the rational sum
+        weights: multiplicative coefficients of the rational sum
+        constant: multiplicative constant in front of the sum
+    """
     M = np.ceil((np.pi**2) / (4. * s * kappa**2))
     N = np.ceil((np.pi**2) / (4. * (1. - s) * kappa**2))
 
     constant = (2. * np.sin(np.pi * s) * kappa) / np.pi
 
-    ls = np.arange(-M, N + 1, 1)
-    num_param_pbms = len(ls)
-    q = 0.
-    c_1s = []
-    c_2s = []
-    weights = []
-    for l in ls:
-        c_1 = np.exp(2. * kappa * l)
-        c_1s.append(c_1)
-        c_2 = 1.
-        c_2s.append(c_2)
-        weight = np.exp(2. * s * kappa * l)
-        weights.append(weight)
-        q += weight / (c_2 + c_1 * lmbda)
-    q *= constant
+    ls = np.arange(-M, N + 1, 1, dtype=np.float64)
+    c_1s = np.exp(2. * kappa * ls)
+    c_2s = np.ones_like(c_1s)
+    weights = np.exp(2. * s * kappa * ls)
+
+    q = constant * np.sum(weights / (c_2s + c_1s * lmbda))
+
     return q, c_1s, c_2s, weights, constant
 
 
@@ -75,26 +69,27 @@ mesh = RectangleMesh(
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
     CellType.triangle)
 
-# Input data
-
 
 def f_e(x):
+    """Checkerboard problem data"""
     values = np.ones(x.shape[1])
     values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
     values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
     return values
 
 
-l2_norm_data = 1.
-
-# Generates rational sum parameters s.t. rational approx. error < tol * 1e-3 * l2_norm_data
-tol_rs = tol * 1e-3 * l2_norm_data
+# Find kappa s.t. rational approx. error < tol * 1e-3 * || f_e || according to
+# a priori result in Bonito and Pasciak 2013
+f_e_L2_norm = 1.
+tol_rs = tol * 1e-3 * f_e_L2_norm
+# Range of kappas
 kappas = np.flip(np.arange(1e-2, 1., step=0.01))
 for kappa in kappas:
     q, c_1s, c_2s, weights, constant = bp_sum(lmbda_0, kappa, s)
     diff = np.abs(lmbda_0 ** (-s) - q)
     if np.less(diff, tol_rs):
         break
+print(f"Proposed kappa: {kappa}")
 
 # Initialize estimator value
 eta = 1.
@@ -102,6 +97,7 @@ eta = 1.
 ref_step = 0
 while np.greater(eta, tol):
     ufl_domain = mesh.ufl_domain()
+
     # FE spaces
     element = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
     V = FunctionSpace(mesh, element)
@@ -146,44 +142,49 @@ while np.greater(eta, tol):
     dofs = locate_dofs_topological(V, 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
-    # BW estimator boundary conditions
+    # Homogeneous zero BW estimator boundary condition
     boundary_entities = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    # Initialize FE solution
+    # Fractional solution
     u_h = Function(V)
-    # Initialize Bank-Weiser solution
+    # Parametric solution
+    u_param = Function(V)
+    # Bank-Weiser error solution for fractional problem
     bw_f = Function(V_f)
-    # Initialize estimator DG0 function
+    # L^2 error estimator for fractional problem proposed in Bulle et al. 2022
     eta_e = Function(V_e)
+
+    # Functions to store results
+    # L2 norm of parametric Bank-Weiser solution (unused in this methodology)
+    eta_h = Function(V_e)
+    e_h_f = Function(V_f)   # Parametric Bank-Weiser solution
+    e_D = Function(V_f)     # Zero dirichlet boundary condition
+    e_D.vector.set(0.0)    # Zero dirichlet boundary condition
+
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
-        '''
-        Parametric problems solves
-        '''
-        # Linear system assembly
-        print(f'Ref. step {ref_step} Param. pbm {i} System assembly...')
+        # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
+        # TODO: Sparsity pattern could be moved outside loop
         A = assemble_matrix(a_form, bcs=bcs)
         A.assemble()
         b = assemble_vector(L_form)
 
+        u_param.vector.set(0.0)
         apply_lifting(b, [a_form], [bcs])
         b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         set_bc(b, bcs)
 
         # Linear system solve
-        print(f'Ref. step {ref_step} Param. pbm {i} System solve...')
+        print(f'Refinement step {ref_step}: Parametric problem {i} System solve...')
         options = PETSc.Options()
         options["ksp_type"] = "cg"
-        options["ksp_view"] = None
         options["pc_type"] = "hypre"
         options["ksp_rtol"] = 1e-10
         options["pc_hypre_type"] = "boomeramg"
-        options["ksp_monitor_true_residual"] = None
 
-        u_param = Function(V)
         solver = PETSc.KSP().create(MPI.COMM_WORLD)
         solver.setOperators(A)
         solver.setFromOptions()
@@ -194,35 +195,34 @@ while np.greater(eta, tol):
         # Update fractional solution
         u_h.vector.axpy(weight, u_param.vector)
 
-        '''
-        A posteriori error estimation
-        '''
+        # A posteriori error estimation
         a_e_form = cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx
         L_e_form = inner(f + cst_1 * div(grad(u_param)) - cst_2 * u_param, v_f) * dx\
             + inner(cst_1 * jump(grad(u_param), -n), avg(v_f)) * dS
 
         L_eta = inner(inner(e_h, e_h), v_e) * dx
 
-        # Functions to store results
-        eta_h = Function(V_e)   # L2 norm of parametric BW solution (not used here)
-        e_h_f = Function(V_f)   # Parametric Bank-Weiser solution
-        e_D = Function(V_f)     # Zero dirichlet boundary condition
+        eta_h.vector.set(0.0)   # L2 norm of parametric Bank-Weiser solution (unused)
+        e_h_f.vector.set(0.0)   # Parametric Bank-Weiser solution
 
-        print(f'Ref. step {ref_step} Param. pbm {i} Estimate...')
+        print(f'Refinement step {ref_step}: Parametric problem {i}: Estimate...')
         fenicsx_error_estimation.estimate(
-            eta_h, a_e_form, L_e_form, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D, diagonal=max(1., cst_1.value))
+            eta_h, a_e_form, L_e_form, L_eta,
+            N, boundary_entities_sorted, e_h=e_h_f,
+            e_D=e_D, diagonal=max(1., cst_1.value))
 
+        # Update fractional error solution
         bw_f.vector.axpy(weight, e_h_f.vector)
 
     # Scale fractional solution and save
-    print(f'Ref. step {ref_step} Solution computation and solve...')
+    print(f'Refinement step {ref_step}: Solution computation and solve...')
     u_h.vector.scale(constant)
     with XDMFFile(MPI.COMM_WORLD, f"./output/u_{str(ref_step)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(u_h)
 
     # Scale Bank-Weiser solution
-    print(f'Ref. step {ref_step} Estimator computation and solve...')
+    print(f'Refinement step {ref_step}: Estimator computation and solve...')
     bw_f.vector.scale(constant)
     with XDMFFile(MPI.COMM_WORLD, f"./output/bw_{str(ref_step)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
@@ -237,10 +237,10 @@ while np.greater(eta, tol):
 
     # Compute L2 error estimator
     eta = np.sqrt(sum(eta_e.vector.array))
-    print('BW estimator =', eta)
+    print(f'Refinement step: {ref_step}: Error:', eta)
 
     # Marking
-    print(f'Ref. step {ref_step} Marking...')
+    print(f'Refinement step: {ref_step} Marking...')
     eta_global = eta**2
     cutoff = theta * eta_global
 
@@ -258,7 +258,7 @@ while np.greater(eta, tol):
     markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
 
     # Refine mesh
-    print(f'Ref. step {ref_step} Refinement...')
+    print(f'Refinement step {ref_step}: Refinement...')
     mesh.topology.create_entities(mesh.topology.dim - 1)
     mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
 
