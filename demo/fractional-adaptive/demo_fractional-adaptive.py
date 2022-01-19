@@ -43,41 +43,48 @@ Returns:
     weights: multiplicative coefficients of the rational sum
     constant: multiplicative constant in front of the sum
 '''
+
+
 def bp_sum(lmbda, kappa, s):
-    M = np.ceil((np.pi**2)/(4.*s*kappa**2))
-    N = np.ceil((np.pi**2)/(4.*(1.-s)*kappa**2))
+    M = np.ceil((np.pi**2) / (4. * s * kappa**2))
+    N = np.ceil((np.pi**2) / (4. * (1. - s) * kappa**2))
 
-    constant = (2.*np.sin(np.pi*s)*kappa)/np.pi
+    constant = (2. * np.sin(np.pi * s) * kappa) / np.pi
 
-    ls = np.arange(-M, N+1, 1)
+    ls = np.arange(-M, N + 1, 1)
     num_param_pbms = len(ls)
     q = 0.
     c_1s = []
     c_2s = []
     weights = []
     for l in ls:
-        c_1 = np.exp(2.*kappa*l)
+        c_1 = np.exp(2. * kappa * l)
         c_1s.append(c_1)
         c_2 = 1.
         c_2s.append(c_2)
-        weight = np.exp(2.*s*kappa*l)
+        weight = np.exp(2. * s * kappa * l)
         weights.append(weight)
-        q += weight/(c_2+c_1*lmbda)
+        q += weight / (c_2 + c_1 * lmbda)
     q *= constant
     return q, c_1s, c_2s, weights, constant
 
+
 # Structured mesh
 mesh = RectangleMesh(
-        MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
-        CellType.triangle)
+    MPI.COMM_WORLD,
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
+    CellType.triangle)
 
 # Input data
+
+
 def f_e(x):
     values = np.ones(x.shape[1])
     values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
     values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
     return values
+
+
 l2_norm_data = 1.
 
 # Generates rational sum parameters s.t. rational approx. error < tol * 1e-3 * l2_norm_data
@@ -107,7 +114,7 @@ while np.greater(eta, tol):
     V_f = FunctionSpace(mesh, element_f)
     e_f = TrialFunction(V_f)
     v_f = TestFunction(V_f)
-    
+
     V_e = FunctionSpace(mesh, element_e)
     v_e = TestFunction(V_e)
 
@@ -135,13 +142,13 @@ while np.greater(eta, tol):
     u0 = Function(V)
     u0.vector.set(0.0)
     facets = locate_entities_boundary(
-            mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = locate_dofs_topological(V, 1, facets)
     bcs = [DirichletBC(u0, dofs)]
 
     # BW estimator boundary conditions
     boundary_entities = locate_entities_boundary(
-            mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
     # Initialize FE solution
@@ -182,7 +189,7 @@ while np.greater(eta, tol):
         solver.setFromOptions()
         solver.solve(b, u_param.vector)
         u_param.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-                               mode=PETSc.ScatterMode.FORWARD)
+                                   mode=PETSc.ScatterMode.FORWARD)
 
         # Update fractional solution
         u_h.vector.axpy(weight, u_param.vector)
@@ -192,7 +199,7 @@ while np.greater(eta, tol):
         '''
         a_e_form = cst_1 * inner(grad(e_f), grad(v_f)) * dx + cst_2 * inner(e_f, v_f) * dx
         L_e_form = inner(f + cst_1 * div(grad(u_param)) - cst_2 * u_param, v_f) * dx\
-                + inner(cst_1 * jump(grad(u_param), -n), avg(v_f)) * dS
+            + inner(cst_1 * jump(grad(u_param), -n), avg(v_f)) * dS
 
         L_eta = inner(inner(e_h, e_h), v_e) * dx
 
@@ -203,7 +210,7 @@ while np.greater(eta, tol):
 
         print(f'Ref. step {ref_step} Param. pbm {i} Estimate...')
         fenicsx_error_estimation.estimate(
-                eta_h, a_e_form, L_e_form, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D, diagonal=max(1., cst_1.value))
+            eta_h, a_e_form, L_e_form, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D, diagonal=max(1., cst_1.value))
 
         bw_f.vector.axpy(weight, e_h_f.vector)
 
@@ -220,7 +227,6 @@ while np.greater(eta, tol):
     with XDMFFile(MPI.COMM_WORLD, f"./output/bw_{str(ref_step)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(bw_f)
-
 
     # Compute L2 error estimator DG0 function and save
     eta_f = assemble_vector(inner(inner(bw_f, bw_f), v_e) * dx)
