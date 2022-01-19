@@ -33,9 +33,27 @@ k = 1
 # tolerance for FE will be tol)
 tol = 1e-3
 # Dorfler marking parameter
-theta = 0.5
+theta = 0.3
 
 
+
+# Structured mesh
+mesh = RectangleMesh(
+    MPI.COMM_WORLD,
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
+    CellType.triangle)
+
+
+def f_e(x):
+    """Checkerboard problem data"""
+    values = np.ones(x.shape[1])
+    values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
+    values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
+    return values
+
+
+# Find kappa s.t. rational approx. error < tol * 1e-3 * || f_e || according to
+# a priori result in Bonito and Pasciak 2013
 def bp_sum(lmbda, kappa, s):
     """
     Generates the parameters for the rational sum according to exponentially
@@ -68,28 +86,10 @@ def bp_sum(lmbda, kappa, s):
     return q, c_1s, c_2s, weights, constant
 
 
-# Structured mesh
-mesh = RectangleMesh(
-    MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
-    CellType.triangle)
-
-
-def f_e(x):
-    """Checkerboard problem data"""
-    values = np.ones(x.shape[1])
-    values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
-    values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
-    return values
-
-
-# Find kappa s.t. rational approx. error < tol * 1e-3 * || f_e || according to
-# a priori result in Bonito and Pasciak 2013
 f_e_L2_norm = 1.
 tol_rs = tol * 1e-3 * f_e_L2_norm
-# Range of kappas
-kappas = np.flip(np.arange(1e-2, 1., step=0.01))
-for kappa in kappas:
+trial_kappas = np.flip(np.arange(1e-2, 1., step=0.01))
+for kappa in trial_kappas:
     q, c_1s, c_2s, weights, constant = bp_sum(lmbda_0, kappa, s)
     diff = np.abs(lmbda_0 ** (-s) - q)
     if np.less(diff, tol_rs):
@@ -187,7 +187,7 @@ while np.greater(eta, tol):
         options = PETSc.Options()
         options["ksp_type"] = "cg"
         options["pc_type"] = "hypre"
-        options["ksp_rtol"] = 1e-10
+        options["ksp_rtol"] = 1e-7
         options["pc_hypre_type"] = "boomeramg"
 
         solver = PETSc.KSP().create(MPI.COMM_WORLD)
