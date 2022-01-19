@@ -1,4 +1,4 @@
-# Copyright 2020, Jack S. Hale
+# Copyright 2020, Jack S. Hale, Raphael Bulle.
 # SPDX-License-Identifier: LGPL-3.0-or-later
 import numpy as np
 
