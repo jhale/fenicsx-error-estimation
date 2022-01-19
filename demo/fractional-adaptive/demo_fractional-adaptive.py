@@ -214,7 +214,7 @@ while np.greater(eta, tol):
         # Update fractional error solution
         bw_f.vector.axpy(weight, e_h_f.vector)
 
-    # Scale fractional solution and save
+    # Scale fractional solution
     print(f'Refinement step {ref_step}: Solution computation and solve...')
     u_h.vector.scale(constant)
     with XDMFFile(MPI.COMM_WORLD, f"./output/u_{str(ref_step)}.xdmf", "w") as fo:
@@ -228,7 +228,7 @@ while np.greater(eta, tol):
         fo.write_mesh(mesh)
         fo.write_function(bw_f)
 
-    # Compute L2 error estimator DG0 function and save
+    # Compute L2 error estimator
     eta_f = assemble_vector(inner(inner(bw_f, bw_f), v_e) * dx)
     eta_e.vector.setArray(eta_f)
     with XDMFFile(MPI.COMM_WORLD, f"./output/eta_{str(ref_step)}.xdmf", "w") as fo:
@@ -236,14 +236,16 @@ while np.greater(eta, tol):
         fo.write_function(eta_e)
 
     # Compute L2 error estimator
+    # TODO: Not MPI safe
     eta = np.sqrt(sum(eta_e.vector.array))
     print(f'Refinement step: {ref_step}: Error:', eta)
 
-    # Marking
+    # Dörfler marking
     print(f'Refinement step: {ref_step} Marking...')
     eta_global = eta**2
     cutoff = theta * eta_global
 
+    assert MPI.COMM_WORLD.size == 0
     sorted_cells = np.argsort(eta_e.vector.array)[::-1]
     rolling_sum = 0.0
     for i, e in enumerate(eta_e.vector.array[sorted_cells]):
