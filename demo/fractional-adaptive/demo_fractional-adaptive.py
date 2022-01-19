@@ -1,5 +1,10 @@
 # Copyright 2020, Jack S. Hale, Raphael Bulle.
 # SPDX-License-Identifier: LGPL-3.0-or-later
+
+# This demo solves the fractional Laplacian problem using an adaptive finite
+# element scheme outlined in Bulle et al. 2022. The problem specification is
+# taken from Bonito and Pasciak 2013.
+
 import numpy as np
 
 import dolfinx
@@ -26,9 +31,9 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 1e-2
+tol = 1e-3
 # Dorfler marking parameter
-theta = 0.3
+theta = 0.5
 
 
 def bp_sum(lmbda, kappa, s):
@@ -178,7 +183,7 @@ while np.greater(eta, tol):
         set_bc(b, bcs)
 
         # Linear system solve
-        print(f'Refinement step {ref_step}: Parametric problem {i} System solve...')
+        print(f'Refinement step {ref_step}: Parametric problem {i}: System solve...')
         options = PETSc.Options()
         options["ksp_type"] = "cg"
         options["pc_type"] = "hypre"
