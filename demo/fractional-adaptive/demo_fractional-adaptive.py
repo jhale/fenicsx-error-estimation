@@ -36,7 +36,6 @@ tol = 1e-3
 theta = 0.3
 
 
-
 # Structured mesh
 mesh = RectangleMesh(
     MPI.COMM_WORLD,
