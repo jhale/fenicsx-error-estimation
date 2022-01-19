@@ -26,7 +26,7 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 1e-3
+tol = 1e-2
 # Dorfler marking parameter
 theta = 0.3
 
@@ -245,7 +245,7 @@ while np.greater(eta, tol):
     eta_global = eta**2
     cutoff = theta * eta_global
 
-    assert MPI.COMM_WORLD.size == 0
+    assert MPI.COMM_WORLD.size == 1
     sorted_cells = np.argsort(eta_e.vector.array)[::-1]
     rolling_sum = 0.0
     for i, e in enumerate(eta_e.vector.array[sorted_cells]):
