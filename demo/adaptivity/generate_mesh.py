@@ -37,7 +37,7 @@ for cell in mesh.cells:
         triangle_cells = cell.data
 
 meshio.write("./mesh.xdmf", meshio.Mesh(
-    points = mesh.points,
+    points=mesh.points,
     cells={"triangle": triangle_cells}))
 
 '''

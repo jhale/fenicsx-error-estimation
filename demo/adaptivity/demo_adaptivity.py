@@ -6,7 +6,9 @@ import petsc4py.PETSc as PETSc
 import pandas
 
 import dolfinx
+from dolfinx.fem import dirichletbc, form, Function, FunctionSpace
 from dolfinx.io import XDMFFile
+from dolfinx.mesh import compute_incident_entities
 
 import ufl
 from ufl import avg, div, grad, inner, jump
@@ -25,7 +27,7 @@ def main():
     results = []
     for i in range(0, 20):
         result = {}
-        
+
         print(f'STEP {i}')
 
         def u_exact(x):
@@ -36,8 +38,8 @@ def main():
                                           np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
             return values
 
-        V = dolfinx.FunctionSpace(mesh, ("CG", k))
-        u_exact_V = dolfinx.Function(V)
+        V = FunctionSpace(mesh, ("Lagrange", k))
+        u_exact_V = Function(V)
         u_exact_V.interpolate(u_exact)
         with XDMFFile(MPI.COMM_WORLD, f"output/u_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
@@ -61,9 +63,9 @@ def main():
         # Exact local error
         dx = ufl.Measure("dx", domain=mesh.ufl_domain())
         V_e = eta_h.function_space
-        eta_exact = dolfinx.Function(V_e, name="eta_exact")
+        eta_exact = Function(V_e, name="eta_exact")
         v = ufl.TestFunction(V_e)
-        eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx)
+        eta = dolfinx.fem.assemble_vector(form(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx))
         eta_exact.vector.setArray(eta)
         result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
@@ -73,15 +75,15 @@ def main():
         # Necessary for parallel operation
         h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
             0, mesh.topology.index_map(mesh.topology.dim).size_local, dtype=np.int32))
-        h_max = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MAX)
+        h_max = mesh.comm.allreduce(h_local, op=MPI.MAX)
         result['h_max'] = h_max
-        h_min = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
+        h_min = mesh.comm.allreduce(h_local, op=MPI.MIN)
         result['h_min'] = h_min
         result['num_dofs'] = V.dofmap.index_map.size_global
 
         # Mark
         print('Marking...')
-        assert(mesh.mpi_comm().size == 1)
+        assert(mesh.comm.size == 1)
         theta = 0.3
 
         eta_global = sum(eta_h.vector.array)
@@ -97,12 +99,11 @@ def main():
 
         refine_cells = sorted_cells[0:breakpoint + 1]
         indices = np.array(np.sort(refine_cells), dtype=np.int32)
-        markers = np.zeros(indices.shape, dtype=np.int8)
-        markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
 
         # Refine
         print('Refining...')
-        mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
+        edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 1)
+        mesh = dolfinx.mesh.refine(mesh, edges)
 
         with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
@@ -121,22 +122,21 @@ def solve(V, u_exact_V):
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
 
-    f = dolfinx.Function(V)  # Zero data
+    f = Function(V)  # Zero data
 
     a = inner(grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
-    dbc = dolfinx.Function(V)
     facets = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
-    bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
+    bcs = [dirichletbc(u_exact_V, dofs)]
 
-    A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
+    A = dolfinx.fem.assemble_matrix(form(a), bcs=bcs)
     A.assemble()
 
-    b = dolfinx.fem.assemble_vector(L)
-    dolfinx.fem.apply_lifting(b, [a], [bcs])
+    b = dolfinx.fem.assemble_vector(form(L))
+    dolfinx.fem.apply_lifting(b, [form(a)], [bcs])
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
     dolfinx.fem.set_bc(b, bcs)
 
@@ -148,7 +148,7 @@ def solve(V, u_exact_V):
     options["pc_hypre_type"] = "boomeramg"
     options["ksp_monitor_true_residual"] = None
 
-    u_h = dolfinx.Function(V)
+    u_h = Function(V)
     solver = PETSc.KSP().create(MPI.COMM_WORLD)
     solver.setOperators(A)
     solver.setFromOptions()
@@ -181,12 +181,12 @@ def estimate(u_h):
 
     # Linear form
     V = u_h.function_space
-    f = dolfinx.Function(V)  # Zero data
+    f = Function(V)  # Zero data
     r = f + div(grad(u_h))
     L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
-    V_e = dolfinx.FunctionSpace(mesh, element_e)
+    V_e = FunctionSpace(mesh, element_e)
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
 
@@ -197,7 +197,7 @@ def estimate(u_h):
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    eta_h = dolfinx.Function(V_e)
+    eta_h = Function(V_e)
 
     fenicsx_error_estimation.estimate(
         eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
