@@ -1,20 +1,17 @@
 # Copyright 2020, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import fenicsx_error_estimation
 import numpy as np
 
-from mpi4py import MPI
-from petsc4py import PETSc
-
 import dolfinx
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, form,
-                         locate_dofs_topological, set_bc, Function, FunctionSpace, dirichletbc, Constant)
-from dolfinx.io import XDMFFile
-from dolfinx.mesh import locate_entities_boundary, create_rectangle, CellType
-
-import fenicsx_error_estimation
-
 import ufl
+from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar,
+                         form)
+from dolfinx.io import XDMFFile
+from dolfinx.mesh import CellType, create_rectangle
 from ufl import avg, div, dot, grad, inner, jump, pi, sin
+
+from mpi4py import MPI
 
 # The first part of this script is completely standard. We solve a screened
 # Poisson problem on a square mesh with known data and homogeneous Neumann
@@ -25,7 +22,7 @@ mesh = create_rectangle(
     [np.array([0, 0]), np.array([1, 1])], [128, 128],
     CellType.triangle)
 
-k = 1 
+k = 1
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
