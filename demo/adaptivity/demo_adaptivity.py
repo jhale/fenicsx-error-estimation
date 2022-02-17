@@ -1,20 +1,17 @@
+import fenicsx_error_estimation.estimate
 import numpy as np
+import pandas
+from fenicsx_error_estimation import create_interpolation
+
+import dolfinx
+import ufl
+from dolfinx.fem import Function, FunctionSpace, dirichletbc, form
+from dolfinx.io import XDMFFile
+from dolfinx.mesh import compute_incident_entities
+from ufl import avg, div, grad, inner, jump
 
 import mpi4py.MPI as MPI
 import petsc4py.PETSc as PETSc
-
-import pandas
-
-import dolfinx
-from dolfinx.fem import dirichletbc, form, Function, FunctionSpace
-from dolfinx.io import XDMFFile
-from dolfinx.mesh import compute_incident_entities
-
-import ufl
-from ufl import avg, div, grad, inner, jump
-
-import fenicsx_error_estimation.estimate
-from fenicsx_error_estimation import create_interpolation
 
 k = 1
 
