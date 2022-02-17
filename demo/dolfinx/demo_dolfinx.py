@@ -1,36 +1,29 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import numpy as np
-
 import cffi
-from mpi4py import MPI
-from petsc4py import PETSc
+import numpy as np
+from fenicsx_error_estimation import create_interpolation, estimate
 
 import dolfinx
-from dolfinx import cpp
-from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
-from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
-                         locate_dofs_topological, set_bc)
-from dolfinx.fem.assemble import _create_cpp_form
-from dolfinx.io import XDMFFile
-from dolfinx.mesh import locate_entities_boundary
-
-import fenicsx_error_estimation.cpp
-from fenicsx_error_estimation import estimate, create_interpolation
-
 import ufl
-from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
-from ufl.algorithms.elementtransformations import change_regularity
+from dolfinx.fem import (Function, FunctionSpace, assemble_scalar,
+                         assemble_vector, dirichletbc, form,
+                         locate_dofs_topological)
+from dolfinx.io import XDMFFile
+from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
+from ufl import avg, div, grad, inner, jump, pi, sin
+
+from mpi4py import MPI
+from petsc4py import PETSc
 
 ffi = cffi.FFI()
 
 
 def primal():
-    mesh = RectangleMesh(
+    mesh = create_rectangle(
         MPI.COMM_WORLD,
-        [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
-        CellType.triangle, dolfinx.cpp.mesh.GhostMode.shared_facet)
+        [np.array([0, 0]), np.array([1, 1])], [128, 128],
+        CellType.triangle, dolfinx.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
     V = FunctionSpace(mesh, element)
@@ -49,17 +42,18 @@ def primal():
     facets = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = locate_dofs_topological(V, 1, facets)
-    bcs = [DirichletBC(u0, dofs)]
+    bcs = [dirichletbc(u0, dofs)]
 
     problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
     u = problem.solve()
 
-    with XDMFFile(mesh.mpi_comm(), "output/u.xdmf", "w") as of:
+    with XDMFFile(mesh.comm, "output/u.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(u)
 
     u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
-    error = mesh.mpi_comm().allreduce(assemble_scalar(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3)), op=MPI.SUM)
+    error = mesh.comm.allreduce(assemble_scalar(
+        form(inner(grad(u - u_exact), grad(u - u_exact)) * dx(degree=3))), op=MPI.SUM)
     print("True error: {}".format(np.sqrt(error)))
 
     return u
@@ -89,28 +83,27 @@ def estimate_primal(u_h):
     a_e = inner(grad(e), grad(v)) * dx
 
     # Linear form
-    V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
     L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
 
     # Error form
-    V_e = dolfinx.FunctionSpace(mesh, element_e)
+    V_e = FunctionSpace(mesh, element_e)
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     # Functions to store results
     eta_h = Function(V_e)
-    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-    e_h = dolfinx.Function(V_f_dolfin)
+    V_f_dolfin = FunctionSpace(mesh, element_f)
+    e_h = Function(V_f_dolfin)
 
     # Boundary conditions
     boundary_entities = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
-    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-    e_D = dolfinx.Function(V_f_dolfin)
-    e_h = dolfinx.Function(V_f_dolfin)
+    V_f_dolfin = FunctionSpace(mesh, element_f)
+    e_D = Function(V_f_dolfin)
+    e_h = Function(V_f_dolfin)
 
     estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
@@ -120,11 +113,11 @@ def estimate_primal(u_h):
 
     # Try assembling L_eta from e_h directly
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    eta_h_2 = assemble_vector(L_eta)
+    eta_h_2 = assemble_vector(form(L_eta))
     eta_h_2.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h_2.sum())))
 
-    with XDMFFile(mesh.mpi_comm(), "output/eta.xdmf", "w") as of:
+    with XDMFFile(mesh.comm, "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
 
@@ -141,8 +134,6 @@ def estimate_primal_python(u_h):
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
     # We will construct a dolfin.FunctionSpace for assembling the final computed estimator.
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
-
-    V = ufl.FunctionSpace(ufl_mesh, u_h.ufl_element())
 
     V_f = ufl.FunctionSpace(ufl_mesh, element_f)
     e = ufl.TrialFunction(V_f)
@@ -163,11 +154,11 @@ def estimate_primal_python(u_h):
 
     N = create_interpolation(element_f, element_g)
 
-    a_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), a_e)
-    L_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_e)
-    L_eta_form, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), L_eta)
+    a_form, _, _ = dolfinx.jit.ffcx_jit(mesh.comm, a_e)
+    L_form, _, _ = dolfinx.jit.ffcx_jit(mesh.comm, L_e)
+    L_eta_form, _, _ = dolfinx.jit.ffcx_jit(mesh.comm, L_eta)
 
-    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(mesh.mpi_comm(), element_f_cg)
+    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(mesh.comm, element_f_cg)
     cg_dofmap = cg_element_and_dofmap[1]
 
     # Cell integral, no coefficients, no constants.
@@ -371,7 +362,7 @@ def estimate_primal_python(u_h):
         dofs = V_e_dofs.cell_dofs(i)
         eta[dofs] = eta_local
 
-    with XDMFFile(mesh.mpi_comm(), "output/eta_python.xdmf", "w") as of:
+    with XDMFFile(mesh.comm, "output/eta_python.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
     print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta.sum())))
