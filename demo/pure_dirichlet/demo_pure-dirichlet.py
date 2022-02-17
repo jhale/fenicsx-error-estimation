@@ -1,28 +1,22 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import fenicsx_error_estimation
 import numpy as np
 
-from mpi4py import MPI
-from petsc4py import PETSc
-
 import dolfinx
-from dolfinx import cpp
-from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh
-from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, assemble_scalar, Form,
-                         locate_dofs_topological, set_bc)
-from dolfinx.io import XDMFFile
-from dolfinx.mesh import locate_entities_boundary
-
-import fenicsx_error_estimation
-
 import ufl
-from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
+from dolfinx.fem import (Function, FunctionSpace, assemble_scalar, dirichletbc,
+                         form, locate_dofs_topological)
+from dolfinx.io import XDMFFile
+from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
+from ufl import avg, div, grad, inner, jump, pi, sin
+
+from mpi4py import MPI
 
 # Structured mesh
-mesh = RectangleMesh(
+mesh = create_rectangle(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
+    [np.array([0.0, 0.0]), np.array([1.0, 1.0])], [32, 32],
     CellType.triangle)
 
 k = 1
@@ -45,7 +39,7 @@ with u0.vector.localForm() as u0_local:
 facets = locate_entities_boundary(
     mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
 dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
-bcs = [DirichletBC(u0, dofs)]
+bcs = [dirichletbc(u0, dofs)]
 
 problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_h = problem.solve()
@@ -56,7 +50,7 @@ with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
 
 u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 error = MPI.COMM_WORLD.allreduce(assemble_scalar(
-    inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
+    form(inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3))), op=MPI.SUM)
 print("True error: {}".format(np.sqrt(error)))
 
 # Now we specify the Bank-Weiser error estimation problem.
@@ -83,7 +77,7 @@ L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) *
 # Error form
 # Note that e_h is a ufl.Coefficient, not a dolfinx.Function. Inside the
 # assembler e_h is computed locally 'on-the-fly' and then discarded.
-V_e = dolfinx.FunctionSpace(mesh, element_e)
+V_e = FunctionSpace(mesh, element_e)
 e_h = ufl.Coefficient(V_f)
 v_e = ufl.TestFunction(V_e)
 L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
@@ -103,6 +97,6 @@ fenicsx_error_estimation.estimate(eta_h, a_e, L_e, L_eta, N, facets_sorted)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 
-with XDMFFile(MPI.COMM_WORLD, "output/eta.xdmf", "w") as of:
+with XDMFFile(mesh.comm, "output/eta.xdmf", "w") as of:
     of.write_mesh(mesh)
     of.write_function(eta_h)
