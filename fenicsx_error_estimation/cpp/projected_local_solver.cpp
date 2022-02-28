@@ -68,7 +68,6 @@ void projected_local_solver(
   assert(a.num_integrals(type::exterior_facet) == 0);
   assert(L.num_integrals(type::cell) == 1);
   assert(L.num_integrals(type::interior_facet) == 1);
-  assert(L.num_integrals(type::cell) == 1);
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
 

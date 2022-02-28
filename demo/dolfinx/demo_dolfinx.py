@@ -9,6 +9,7 @@ import ufl
 from dolfinx.fem import (Function, FunctionSpace, assemble_scalar,
                          assemble_vector, dirichletbc, form,
                          locate_dofs_topological)
+from dolfinx.fem.petsc import LinearProblem
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
 from ufl import avg, div, grad, inner, jump, pi, sin
@@ -44,7 +45,7 @@ def primal():
     dofs = locate_dofs_topological(V, 1, facets)
     bcs = [dirichletbc(u0, dofs)]
 
-    problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    problem = LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
     u = problem.solve()
 
     with XDMFFile(mesh.comm, "output/u.xdmf", "w") as of:
@@ -108,14 +109,14 @@ def estimate_primal(u_h):
     estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
-    eta_h.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
+    eta_h.x.scatter_forward()
+    print("Bank-Weiser error from estimator (C++): {}".format(np.sqrt(eta_h.vector.sum())))
 
     # Try assembling L_eta from e_h directly
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    eta_h_2 = assemble_vector(form(L_eta))
-    eta_h_2.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h_2.sum())))
+    #L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+    #eta_h_2 = assemble_vector(form(L_eta))
+    #eta_h_2.scatter_forward()
+    #print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h_2.sum())))
 
     with XDMFFile(mesh.comm, "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
@@ -365,7 +366,7 @@ def estimate_primal_python(u_h):
     with XDMFFile(mesh.comm, "output/eta_python.xdmf", "w") as of:
         of.write_mesh(mesh)
         of.write_function(eta_h)
-    print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta.sum())))
+    print("Bank-Weiser error from estimator (pure Python): {}".format(np.sqrt(eta.sum())))
 
 
 def main():

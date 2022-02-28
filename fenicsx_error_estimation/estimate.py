@@ -15,7 +15,7 @@ import fenicsx_error_estimation.cpp
 ffi = cffi.FFI()
 
 
-def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
+def _create_form(form, form_compiler_params: dict = {}, jit_params: dict = {}):
     """Create form without concrete Function Space"""
     sd = form.subdomain_data()
     subdomains, = list(sd.values())
@@ -27,8 +27,8 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
     ufc_form = dolfinx.jit.ffcx_jit(
         mesh.comm,
         form,
-        form_compiler_parameters=form_compiler_parameters,
-        jit_parameters=jit_parameters)[0]
+        form_compiler_params=form_compiler_params,
+        jit_params=jit_params)[0]
 
     original_coefficients = form.coefficients()
 

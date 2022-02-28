@@ -1,6 +1,5 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import fenicsx_error_estimation
 import numpy as np
 
 import dolfinx
@@ -10,6 +9,8 @@ from dolfinx.fem import (Function, FunctionSpace, assemble_scalar, dirichletbc,
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
 from ufl import avg, div, grad, inner, jump, pi, sin
+
+import fenicsx_error_estimation
 
 from mpi4py import MPI
 
@@ -41,7 +42,7 @@ facets = locate_entities_boundary(
 dofs = locate_dofs_topological(V, mesh.topology.dim - 1, facets)
 bcs = [dirichletbc(u0, dofs)]
 
-problem = dolfinx.fem.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+problem = dolfinx.fem.petsc.LinearProblem(a, L, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_h = problem.solve()
 
 with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:

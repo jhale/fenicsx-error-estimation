@@ -7,6 +7,7 @@ import dolfinx
 import ufl
 from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar,
                          form)
+from dolfinx.fem.petsc import LinearProblem
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle
 from ufl import avg, div, dot, grad, inner, jump, pi, sin
@@ -36,7 +37,7 @@ v = ufl.TestFunction(V)
 a = inner(grad(u), grad(v)) * dx + inner(u, v) * dx
 L = inner(f, v) * dx
 
-problem = dolfinx.fem.LinearProblem(a, L, bcs=[], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+problem = LinearProblem(a, L, bcs=[], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_h = problem.solve()
 
 with XDMFFile(mesh.comm, "output/u.xdmf", "w") as of:

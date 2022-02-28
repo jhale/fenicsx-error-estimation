@@ -62,7 +62,7 @@ def main():
         V_e = eta_h.function_space
         eta_exact = Function(V_e, name="eta_exact")
         v = ufl.TestFunction(V_e)
-        eta = dolfinx.fem.assemble_vector(form(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx))
+        eta = dolfinx.fem.petsc.assemble_vector(form(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx))
         eta_exact.vector.setArray(eta)
         result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
@@ -129,10 +129,10 @@ def solve(V, u_exact_V):
     dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
     bcs = [dirichletbc(u_exact_V, dofs)]
 
-    A = dolfinx.fem.assemble_matrix(form(a), bcs=bcs)
+    A = dolfinx.fem.petsc.assemble_matrix(form(a), bcs=bcs)
     A.assemble()
 
-    b = dolfinx.fem.assemble_vector(form(L))
+    b = dolfinx.fem.petsc.assemble_vector(form(L))
     dolfinx.fem.apply_lifting(b, [form(a)], [bcs])
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
     dolfinx.fem.set_bc(b, bcs)
