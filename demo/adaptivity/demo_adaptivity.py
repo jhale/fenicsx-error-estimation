@@ -25,7 +25,7 @@ def main():
     results = []
     for i in range(0, 20):
         result = {}
-        
+
         print(f'STEP {i}')
 
         def u_exact(x):

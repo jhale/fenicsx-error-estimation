@@ -18,8 +18,20 @@ import fenicsx_error_estimation.estimate
 from fenicsx_error_estimation import create_interpolation
 
 k = 1
-kappa_1 = 1.
-kappa_2 = 1.
+
+# Parameters:
+phi = np.pi/2.
+psi = 0.
+
+p1 = 161.4476387975881
+p3 = p1
+p2 = 1.
+p4 = p2
+
+a1 = 0.1
+alpha1 = np.pi/4.
+beta1 = -14.92256510455152
+
 
 def main():
     mesh = UnitSquareMesh(MPI.COMM_WORLD, 8, 8)
@@ -30,16 +42,21 @@ def main():
         result = {}
 
         def u_exact(x):
-            values = np.zeros_like(x[0])
-            values[np.where(np.greater(x[1], 0.5))] = ((2. * x[1][np.where(np.greater(x[1], 0.5))] - 1.) * kappa_1 + kappa_2)/(kappa_1 + kappa_2)
-            values[np.where(np.less(x[1], 0.5))] = (2. * x[1][np.where(np.less(x[1], 0.5))] * kappa_1)/(kappa_1 + kappa_2)
+            r = np.sqrt(x[0]**2 + x[1]**2)
+            theta = np.atan2(x[1], x[0])
+
+            mu = np.zeros_like(x[0])
+            values[np.where(np.lower(theta, 2. * np.pi))] = r**a1 * np.cos((phi - alpha1) * a1) * np.cos((theta - phi - np.pi - beta1) * a1)
+            values[np.where(np.lower(theta, np.pi + phi))] = r**a1 * np.cos(beta1 * a1) * np.cos((theta - np.pi - alpha1) * a1)
+            values[np.where(np.lower(theta, np.pi))] = r**a1 * np.cos(alpha1 * a1) * np.cos((theta - np.pi + beta1) * a1)
+            values[np.where(np.lower(theta, phi))] = r**a1 * np.cos((phi - beta1) * alpha1) * np.cos((theta - phi + alpha1) * a1)
             return values
 
         V = dolfinx.FunctionSpace(mesh, ('CG', k))
         f = dolfinx.Function(V)
 
         V_e = dolfinx.FunctionSpace(mesh, ('DG', 0))
-        
+
         def kappa_python(x):
             values = np.ones_like(x[1]) * kappa_1
             values[np.where(np.less(x[1], 0.5))] = kappa_2
@@ -47,14 +64,14 @@ def main():
         kappa = dolfinx.Function(V_e)
         kappa.interpolate(kappa_python)
 
-        with XDMFFile(MPI.COMM_WORLD, f"output/kappa.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, "output/kappa.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(kappa)
 
         print(f'STEP {i}')
 
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
-        V_f = dolfinx.FunctionSpace(mesh, ('CG', k+1))
+        V_f = dolfinx.FunctionSpace(mesh, ('CG', k + 1))
 
         u_exact_f = dolfinx.Function(V_f)
         u_exact_f.interpolate(u_exact)
@@ -202,14 +219,12 @@ def estimate(u_h, kappa, f, u_dbc):
     n = ufl.FacetNormal(ufl_domain)
 
     # Bilinear form
-    #a_e = inner(kappa * grad(e), grad(v)) * dx
+    # a_e = inner(kappa * grad(e), grad(v)) * dx
     a_e = inner(grad(e), grad(v)) * dx
 
-    # Linear form
-    V = u_h.function_space
-    #r = f + div(kappa * grad(u_h))
+    # r = f + div(kappa * grad(u_h))
     r = f + div(grad(u_h))
-    #L_e = inner(r, v) * dx + inner(jump(kappa * grad(u_h), -n), avg(v)) * dS
+    # L_e = inner(r, v) * dx + inner(jump(kappa * grad(u_h), -n), avg(v)) * dS
     L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
@@ -217,23 +232,23 @@ def estimate(u_h, kappa, f, u_dbc):
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
 
-    #L_eta = inner(inner(kappa * grad(e_h), grad(e_h)), v_e) * dx
+    # L_eta = inner(inner(kappa * grad(e_h), grad(e_h)), v_e) * dx
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     # Boundary conditions
     def boundary_D(x):
         return np.logical_or(np.isclose(x[1], 0), np.isclose(x[1], 1))
-    #dofs = locate_dofs_topological(V, 1, boundary_D)
+    # dofs = locate_dofs_topological(V, 1, boundary_D)
 
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: boundary_D(x))
 
-    #boundary_entities = dolfinx.mesh.locate_entities_boundary(
+    # boundary_entities = dolfinx.mesh.locate_entities_boundary(
     #    mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
     eta_h = dolfinx.Function(V_e)
-    V_f_global = dolfinx.FunctionSpace(mesh, ('CG', k+1))
+    V_f_global = dolfinx.FunctionSpace(mesh, ('CG', k + 1))
     e_h = dolfinx.Function(V_f_global)
 
     fenicsx_error_estimation.estimate(
