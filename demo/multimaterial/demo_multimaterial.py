@@ -6,9 +6,9 @@ import petsc4py.PETSc as PETSc
 import pandas
 
 import dolfinx
-from dolfinx import UnitSquareMesh
+from dolfinx import RectangleMesh
+from dolfinx.cpp.mesh import CellType
 from dolfinx.io import XDMFFile
-from dolfinx.mesh import locate_entities
 from dolfinx.fem import locate_dofs_topological
 
 import ufl
@@ -20,7 +20,7 @@ from fenicsx_error_estimation import create_interpolation
 k = 1
 
 # Parameters:
-phi = np.pi/2.
+phi = np.pi / 2.
 psi = 0.
 
 p1 = 161.4476387975881
@@ -29,27 +29,38 @@ p2 = 1.
 p4 = p2
 
 a1 = 0.1
-alpha1 = np.pi/4.
+alpha1 = np.pi / 4.
 beta1 = -14.92256510455152
 
 
 def main():
-    mesh = UnitSquareMesh(MPI.COMM_WORLD, 8, 8)
+    mesh = RectangleMesh(
+        MPI.COMM_WORLD,
+        [np.array([-0.5, -0.55555, 0]), np.array([0.5, 0.5, 0])], [32, 32],
+        CellType.triangle)
 
     # Adaptive refinement loop
     results = []
-    for i in range(0, 5):
+    for i in range(0, 1):
         result = {}
 
         def u_exact(x):
             r = np.sqrt(x[0]**2 + x[1]**2)
-            theta = np.atan2(x[1], x[0])
+            theta = np.arctan2(x[1], x[0]) + np.pi
 
-            mu = np.zeros_like(x[0])
-            values[np.where(np.lower(theta, 2. * np.pi))] = r**a1 * np.cos((phi - alpha1) * a1) * np.cos((theta - phi - np.pi - beta1) * a1)
-            values[np.where(np.lower(theta, np.pi + phi))] = r**a1 * np.cos(beta1 * a1) * np.cos((theta - np.pi - alpha1) * a1)
-            values[np.where(np.lower(theta, np.pi))] = r**a1 * np.cos(alpha1 * a1) * np.cos((theta - np.pi + beta1) * a1)
-            values[np.where(np.lower(theta, phi))] = r**a1 * np.cos((phi - beta1) * alpha1) * np.cos((theta - phi + alpha1) * a1)
+            values = np.zeros_like(x[0])
+
+            val4 = np.multiply(np.power(r, a1), np.cos((phi - alpha1) * a1) * np.cos((theta - phi - np.pi - beta1) * a1))
+            values[np.where(np.less(theta, 2. * np.pi))] = val4[np.where(np.less(theta, 2. * np.pi))]
+
+            val3 = np.multiply(np.power(r, a1), np.cos(beta1 * a1) * np.cos((theta - np.pi - alpha1) * a1))
+            values[np.where(np.less(theta, np.pi + phi))] = val3[np.where(np.less(theta, np.pi + phi))]
+
+            val2 = np.multiply(np.power(r, a1), np.cos(alpha1 * a1) * np.cos((theta - np.pi + beta1) * a1))
+            values[np.where(np.less(theta, np.pi))] = val2[np.where(np.less(theta, np.pi))]
+
+            val1 = np.multiply(np.power(r, a1), np.cos((phi - beta1) * alpha1) * np.cos((theta - phi + alpha1) * a1))
+            values[np.where(np.less(theta, phi))] = val1[np.where(np.less(theta, phi))]
             return values
 
         V = dolfinx.FunctionSpace(mesh, ('CG', k))
@@ -57,16 +68,22 @@ def main():
 
         V_e = dolfinx.FunctionSpace(mesh, ('DG', 0))
 
-        def kappa_python(x):
-            values = np.ones_like(x[1]) * kappa_1
-            values[np.where(np.less(x[1], 0.5))] = kappa_2
-            return values
-        kappa = dolfinx.Function(V_e)
-        kappa.interpolate(kappa_python)
+        def p_python(x):
+            theta = np.arctan2(x[1], x[0]) + np.pi
+            values = np.zeros_like(x[0])
 
-        with XDMFFile(MPI.COMM_WORLD, "output/kappa.xdmf", "w") as fo:
+            values[np.where(np.less(theta, 2. * np.pi))] = p4
+            values[np.where(np.less(theta, np.pi + phi))] = p3
+            values[np.where(np.less(theta, np.pi))] = p2
+            values[np.where(np.less(theta, phi))] = p1
+            return values
+
+        p = dolfinx.Function(V_e)
+        p.interpolate(p_python)
+
+        with XDMFFile(MPI.COMM_WORLD, "output/p.xdmf", "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(kappa)
+            fo.write_function(p)
 
         print(f'STEP {i}')
 
@@ -84,14 +101,14 @@ def main():
 
         # Solve
         print('Solving...')
-        u_h = solve(V, kappa, f, u_dbc)
+        u_h = solve(V, p, f, u_dbc)
         with XDMFFile(MPI.COMM_WORLD, f"output/u_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_h)
 
         # Estimate
         print("Estimating...")
-        eta_h = estimate(u_h, kappa, f, u_exact_f)
+        eta_h = estimate(u_h, p, f, u_exact_f)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_h)
@@ -102,7 +119,7 @@ def main():
         V_e = eta_h.function_space
         eta_exact = dolfinx.Function(V_e, name="eta_exact")
         v = ufl.TestFunction(V_e)
-        eta = dolfinx.fem.assemble_vector(inner(inner(kappa * grad(u_h - u_exact_f), grad(u_h - u_exact_f)), v) * dx)
+        eta = dolfinx.fem.assemble_vector(inner(inner(p * grad(u_h - u_exact_f), grad(u_h - u_exact_f)), v) * dx)
         eta_exact.vector.setArray(eta)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
@@ -154,22 +171,18 @@ def main():
     print(df)
 
 
-def solve(V, kappa, f, u_dbc):
+def solve(V, p, f, u_dbc):
     mesh = V.mesh
     dx = ufl.Measure("dx", domain=mesh)
 
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
 
-    a = inner(kappa * grad(u), grad(v)) * dx
-    #a = inner(grad(u), grad(v)) * dx
+    a = inner(p * grad(u), grad(v)) * dx
     L = inner(f, v) * dx
 
-    def boundary_D(x):
-        return np.logical_or(np.isclose(x[1], 0.), np.isclose(x[1], 1.))
-
     facets = dolfinx.mesh.locate_entities_boundary(
-        mesh, 1, lambda x: boundary_D(x))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
 
     dofs = locate_dofs_topological(V, 1, facets)
     bcs = [dolfinx.DirichletBC(u_dbc, dofs)]
@@ -200,7 +213,7 @@ def solve(V, kappa, f, u_dbc):
     return u_h
 
 
-def estimate(u_h, kappa, f, u_dbc):
+def estimate(u_h, p, f, u_dbc):
     mesh = u_h.function_space.mesh
     ufl_domain = mesh.ufl_domain()
 
@@ -219,32 +232,26 @@ def estimate(u_h, kappa, f, u_dbc):
     n = ufl.FacetNormal(ufl_domain)
 
     # Bilinear form
-    # a_e = inner(kappa * grad(e), grad(v)) * dx
-    a_e = inner(grad(e), grad(v)) * dx
+    a_e = inner(p * grad(e), grad(v)) * dx
+    # a_e = inner(grad(e), grad(v)) * dx
 
-    # r = f + div(kappa * grad(u_h))
-    r = f + div(grad(u_h))
-    # L_e = inner(r, v) * dx + inner(jump(kappa * grad(u_h), -n), avg(v)) * dS
-    L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
+    r = f + div(p * grad(u_h))
+    L_e = inner(r, v) * dx + inner(jump(p * grad(u_h), -n), avg(v)) * dS
+    # r = f + div(grad(u_h))
+    # L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
     e_h = ufl.Coefficient(V_f)
+    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+    e_D = dolfinx.Function(V_f_dolfin)
     v_e = ufl.TestFunction(V_e)
 
-    # L_eta = inner(inner(kappa * grad(e_h), grad(e_h)), v_e) * dx
-    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-
-    # Boundary conditions
-    def boundary_D(x):
-        return np.logical_or(np.isclose(x[1], 0), np.isclose(x[1], 1))
-    # dofs = locate_dofs_topological(V, 1, boundary_D)
+    L_eta = inner(inner(p * grad(e_h), grad(e_h)), v_e) * dx
+    # L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
-        mesh, 1, lambda x: boundary_D(x))
-
-    # boundary_entities = dolfinx.mesh.locate_entities_boundary(
-    #    mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     boundary_entities_sorted = np.sort(boundary_entities)
 
     eta_h = dolfinx.Function(V_e)
@@ -252,7 +259,7 @@ def estimate(u_h, kappa, f, u_dbc):
     e_h = dolfinx.Function(V_f_global)
 
     fenicsx_error_estimation.estimate(
-        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=u_dbc)
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
     print(eta_h.vector.array)
 
     return eta_h

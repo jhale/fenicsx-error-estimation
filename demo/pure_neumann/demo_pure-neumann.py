@@ -28,7 +28,7 @@ mesh = RectangleMesh(
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [128, 128],
     CellType.triangle)
 
-k = 1 
+k = 1
 element = ufl.FiniteElement("CG", ufl.triangle, k)
 V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
