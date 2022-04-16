@@ -36,7 +36,7 @@ beta1 = -14.92256510455152
 def main():
     mesh = RectangleMesh(
         MPI.COMM_WORLD,
-        [np.array([-0.5, -0.55555, 0]), np.array([0.5, 0.5, 0])], [32, 32],
+        [np.array([-0.5, -0.5, 0]), np.array([0.5, 0.5, 0])], [32, 32],
         CellType.triangle)
 
     # Adaptive refinement loop
@@ -243,8 +243,6 @@ def estimate(u_h, p, f, u_dbc):
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
     e_h = ufl.Coefficient(V_f)
-    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-    e_D = dolfinx.Function(V_f_dolfin)
     v_e = ufl.TestFunction(V_e)
 
     L_eta = inner(inner(p * grad(e_h), grad(e_h)), v_e) * dx
@@ -259,7 +257,7 @@ def estimate(u_h, p, f, u_dbc):
     e_h = dolfinx.Function(V_f_global)
 
     fenicsx_error_estimation.estimate(
-        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
     print(eta_h.vector.array)
 
     return eta_h
