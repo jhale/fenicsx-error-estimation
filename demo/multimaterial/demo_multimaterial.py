@@ -236,17 +236,19 @@ def estimate(u_h, p, f, u_dbc):
     # a_e = inner(grad(e), grad(v)) * dx
 
     r = f + div(p * grad(u_h))
-    L_e = inner(r, v) * dx + inner(jump(p * grad(u_h), -n), avg(v)) * dS
+    J = jump(p * grad(u_h), -n)
     # r = f + div(grad(u_h))
-    # L_e = inner(r, v) * dx + inner(jump(grad(u_h), -n), avg(v)) * dS
+    # J = jump(grad(u_h), -n)
+
+    L_e = inner(r, v) * dx + inner(J, avg(v)) * dS
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
 
-    L_eta = inner(inner(p * grad(e_h), grad(e_h)), v_e) * dx
-    # L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+    # L_eta = inner(p * inner(grad(e_h), grad(e_h)), v_e) * dx
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
