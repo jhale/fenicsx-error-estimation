@@ -21,7 +21,7 @@ k = 1
 
 # Parameters:
 phi = np.pi / 2.
-psi = 0.
+psi = np.pi / 2.
 
 p1 = 161.4476387975881
 p3 = p1
@@ -232,13 +232,13 @@ def estimate(u_h, p, f, u_dbc):
     n = ufl.FacetNormal(ufl_domain)
 
     # Bilinear form
-    a_e = inner(p * grad(e), grad(v)) * dx
-    # a_e = inner(grad(e), grad(v)) * dx
+    # a_e = inner(p * grad(e), grad(v)) * dx
+    a_e = inner(grad(e), grad(v)) * dx
 
-    r = f + div(p * grad(u_h))
-    J = jump(p * grad(u_h), -n)
-    # r = f + div(grad(u_h))
-    # J = jump(grad(u_h), -n)
+    # r = f + div(p * grad(u_h))
+    # J = jump(p * grad(u_h), -n)
+    r = f + div(grad(u_h))
+    J = jump(grad(u_h), -n)
 
     L_e = inner(r, v) * dx + inner(J, avg(v)) * dS
 

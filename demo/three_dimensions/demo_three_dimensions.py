@@ -21,14 +21,15 @@ from fenicsx_error_estimation import estimate, create_interpolation
 import ufl
 from ufl import avg, cos, div, dS, dx, grad, inner, jump, pi, sin
 from ufl.algorithms.elementtransformations import change_regularity
+import time
 
 ffi = cffi.FFI()
 
-k = 2 
+k = 2
 
 
 def primal():
-    mesh = UnitCubeMesh(MPI.COMM_WORLD, 16, 16, 16)
+    mesh = UnitCubeMesh(MPI.COMM_WORLD, 64, 64, 64)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, k)
     V = FunctionSpace(mesh, element)
@@ -43,6 +44,7 @@ def primal():
     L = inner(f, v) * dx(degree=k + 3)
 
     u0 = Function(V)
+    print('Num. dof.:', len(u0.vector.array))
     u0.vector.set(0.0)
     facets = locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.full(x.shape[1], True, dtype=bool))
@@ -138,7 +140,10 @@ def estimate_primal(u_h):
 
 
 def main():
+    time0 = time.time()
     u = primal()
+    time1 = time.time()
+    print('Solve wall time:', time1 - time0)
     estimate_primal(u)
 
 
