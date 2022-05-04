@@ -119,7 +119,7 @@ def main():
         V_e = eta_h.function_space
         eta_exact = dolfinx.Function(V_e, name="eta_exact")
         v = ufl.TestFunction(V_e)
-        eta = dolfinx.fem.assemble_vector(inner(inner(p * grad(u_h - u_exact_f), grad(u_h - u_exact_f)), v) * dx)
+        eta = dolfinx.fem.assemble_vector(inner(inner(grad(u_h - u_exact_f), grad(u_h - u_exact_f)), v) * dx)
         eta_exact.vector.setArray(eta)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
@@ -232,13 +232,10 @@ def estimate(u_h, p, f, u_dbc):
     n = ufl.FacetNormal(ufl_domain)
 
     # Bilinear form
-    # a_e = inner(p * grad(e), grad(v)) * dx
-    a_e = inner(grad(e), grad(v)) * dx
+    a_e = inner(p * grad(e), grad(v)) * dx
 
-    # r = f + div(p * grad(u_h))
-    # J = jump(p * grad(u_h), -n)
-    r = f + div(grad(u_h))
-    J = jump(grad(u_h), -n)
+    r = f + div(p * grad(u_h))
+    J = jump(p * grad(u_h), -n)
 
     L_e = inner(r, v) * dx + inner(J, avg(v)) * dS
 
@@ -247,7 +244,6 @@ def estimate(u_h, p, f, u_dbc):
     e_h = ufl.Coefficient(V_f)
     v_e = ufl.TestFunction(V_e)
 
-    # L_eta = inner(p * inner(grad(e_h), grad(e_h)), v_e) * dx
     L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
 
     boundary_entities = dolfinx.mesh.locate_entities_boundary(
@@ -255,8 +251,6 @@ def estimate(u_h, p, f, u_dbc):
     boundary_entities_sorted = np.sort(boundary_entities)
 
     eta_h = dolfinx.Function(V_e)
-    V_f_global = dolfinx.FunctionSpace(mesh, ('CG', k + 1))
-    e_h = dolfinx.Function(V_f_global)
 
     fenicsx_error_estimation.estimate(
         eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
