@@ -1,60 +1,40 @@
 # Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import pygmsh as pg
-import meshio
+from dolfinx.io import (XDMFFile, extract_gmsh_geometry,
+                        ufl_mesh_from_gmsh)
+from dolfinx.mesh import create_mesh
+from mpi4py import MPI
 
-lc = 0.5
+import gmsh
 
-with pg.geo.Geometry() as geom:
-    lcar = 0.5
+resolution = 0.1
+gmsh.initialize()
+gmsh.option.setNumber("General.Terminal", 0)
+model = gmsh.model()
+model.add("L-shaped")
 
-    # Points
-    p1 = geom.add_point([0., 0., 0.], lcar)
-    p2 = geom.add_point([0., -1., 0.], lcar)
-    p3 = geom.add_point([1., -1., 0.], lcar)
-    p4 = geom.add_point([1., 1., 0.], lcar)
-    p5 = geom.add_point([-1., 1., 0.], lcar)
-    p6 = geom.add_point([-1., 0., 0.], lcar)
+square = model.occ.addRectangle(0, 0, 0, 1., 1.)
 
-    # Lines
-    l1 = geom.add_line(p1, p2)
-    l2 = geom.add_line(p2, p3)
-    l3 = geom.add_line(p3, p4)
-    l4 = geom.add_line(p4, p5)
-    l5 = geom.add_line(p5, p6)
-    l6 = geom.add_line(p6, p1)
+small_square = model.occ.addRectangle(0, 0, 0, 0.5, 0.5)
 
-    # Suface
-    lloop = geom.add_line_loop([l1, l2, l3, l4, l5, l6])
-    surf = geom.add_plane_surface(lloop)
+model.occ.cut([(2, square)], [(2, small_square)])
 
-    mesh = geom.generate_mesh()
+# Get entities of dim 0 (boundary vertices) tags
+ent_tags = model.occ.get_entities(dim=0)
+# Define the resolution near each entity
+model.occ.mesh.setSize(ent_tags, resolution)
+model.occ.synchronize()
+model.mesh.generate(2)
 
-mesh.points = mesh.points[:, :2]
+x = extract_gmsh_geometry(model, model_name="L-shaped")[:, 0:2]
 
-for cell in mesh.cells:
-    if cell.type == 'triangle':
-        triangle_cells = cell.data
+element_types, element_tags, node_tags = model.mesh.getElements(dim=2)
 
-meshio.write("./mesh.xdmf", meshio.Mesh(
-    points = mesh.points,
-    cells={"triangle": triangle_cells}))
+name, dim, order, num_nodes, local_coords, num_first_order_nodes = model.mesh.getElementProperties(element_types[0])
 
-'''
-with pg.geo.Geometry() as geom:
-    geom.add_polygon(
-        [
-            [0.0, 0.0],
-            [0.0, -1.0],
-            [1.0, -1.0],
-            [1.0, 1.0],
-            [-1.0, 1.0],
-            [-1.0, 0.0],
-        ],
-        mesh_size=0.5,
-    )
-    mesh = geom.generate_mesh()
+cells = node_tags[0].reshape(-1, num_nodes) - 1
 
-mesh.points = mesh.points[:, :2]
-meshio.write("mesh.xdmf", mesh)
-'''
+mesh = create_mesh(MPI.COMM_SELF, cells, x, ufl_mesh_from_gmsh(element_types[0], 2))
+
+with XDMFFile(MPI.COMM_SELF, "mesh.xdmf", "w") as of:
+    of.write_mesh(mesh)

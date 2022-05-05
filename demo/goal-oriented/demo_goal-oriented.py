@@ -19,14 +19,12 @@ k = 1
 
 def main():
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
-        mesh = fi.read_mesh(name="Grid")
+        mesh = fi.read_mesh()
 
     # Adaptive refinement loop
     results = []
     for i in range(0, 20):
         result = {}
-
-        print(f'STEP {i}')
 
         def u_exact(x):
             r = np.sqrt(x[0] * x[0] + x[1] * x[1])
@@ -44,21 +42,21 @@ def main():
             fo.write_function(u_exact_V)
 
         # Solve primal problem
-        print('Solving primal problem...')
+        print(f'STEP {i}: solving primal problem...')
         u_h = solve_primal(V, u_exact_V)
         with XDMFFile(MPI.COMM_WORLD, f"output/u_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_h)
 
         # Solve dual problem
-        print('Solving dual problem...')
+        print(f'STEP {i}: solving dual problem...')
         z_h = solve_dual(V)
         with XDMFFile(MPI.COMM_WORLD, f"output/z_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(z_h)
 
         # Estimate primal problem
-        print("Estimating primal problem...")
+        print(f"STEP {i}: estimating primal problem...")
         eta_u = estimate_primal(u_h)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_u_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
@@ -66,17 +64,17 @@ def main():
         result['error_bw_u'] = np.sqrt(eta_u.vector.sum())
 
         # Estimate dual problem
-        print("Estimating dual problem...")
+        print(f"STEP {i}: estimating dual problem...")
         eta_z = estimate_dual(z_h)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_z_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_z)
         result['error_bw_u'] = np.sqrt(eta_z.vector.sum())
 
-        # Exact local error
-        J_exact = 0.    # TODO: compute a precise approximation to J(u_exact)
+        # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
+        J_fine = 0.0191792218
 
-        V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 3))
+        V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
         c = dolfinx.Function(V_f)
         c.interpolate(weight)
         with XDMFFile(MPI.COMM_WORLD, f"output/c_{str(i).zfill(4)}.xdmf", "w") as fo:
@@ -86,7 +84,7 @@ def main():
         dx = ufl.Measure("dx", domain=mesh)
 
         J_u_h = dolfinx.fem.assemble_scalar(inner(c, u_h) * dx)
-        result['exact_error'] = np.abs(J_u_h - J_exact)
+        result['exact_error'] = np.abs(J_u_h - J_fine)
 
         # Necessary for parallel operation
         h_local = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, np.arange(
@@ -111,22 +109,22 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_w_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_w)
-        result['error_bw_w'] = np.sqrt(eta_w.vector.sum())
+        result['error_bw_w'] = np.sqrt(eta_u.vector.sum() * eta_z.vector.sum())
 
         # Mark
         print('Marking...')
         assert(mesh.mpi_comm().size == 1)
         theta = 0.3
 
-        eta_global = sum(eta_w.vector.array)
+        eta_global = eta_w.vector.sum()
         cutoff = theta * eta_global
 
         sorted_cells = np.argsort(eta_w.vector.array)[::-1]
         rolling_sum = 0.0
-        for i, e in enumerate(eta_w.vector.array[sorted_cells]):
+        for j, e in enumerate(eta_w.vector.array[sorted_cells]):
             rolling_sum += e
             if rolling_sum > cutoff:
-                breakpoint = i
+                breakpoint = j
                 break
 
         refine_cells = sorted_cells[0:breakpoint + 1]
@@ -148,21 +146,16 @@ def main():
     print(df)
 
 
-'''
-Arctan circular plateau weight to define the goal functional,
-inspired by: https://math.nist.gov/cgi-bin/amr-display-problem.cgi
-'''
-def weight(x):
-    # alpha, beta and C chosen s.t. weight ~ 0 outside the plateau and weight ~ 1 inside
-    C = 1.                          # z axis shift
-    alpha = 1000.                   # steepness of the plateau
-    beta = 1. / np.pi               # arctan scaling
-    r_0 = 0.25                      # Radius of the circular plateau
-    x_0 = np.ones_like(x[0]) * 0.5  # x coordinate of the center of the plateau
-    y_0 = np.ones_like(x[1]) * 0.5  # y coordinate of the center of the plateau
-    r = np.sqrt((x[0] - x_0)**2 + (x[1] - y_0)**2)
-    value = C - beta * np.arctan(alpha * (r - r_0))
-    return value
+def weight(x):  # Gaussian function to focus the goal functional on a particular region of the domain
+    eps_f = 0.1
+    center_x = 0.5
+    center_y = 0.5
+    r2 = ((x[0] - center_x)**2 + (x[1] - center_y)**2) / eps_f**2.
+
+    values = np.zeros_like(x[0])
+
+    values = np.exp(- r2)
+    return values
 
 
 def solve_primal(V, u_exact_V):
@@ -226,7 +219,7 @@ def solve_dual(V):
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
 
-    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 3))
+    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
     c = dolfinx.Function(V_c)
     c.interpolate(weight)
 
@@ -326,7 +319,7 @@ def estimate_dual(z_h):
     # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
 
-    V_c = dolfinx.FunctionSpace(mesh, ("CG", k+3))
+    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
     c = dolfinx.Function(V_c)
     c.interpolate(weight)
 
