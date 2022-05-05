@@ -30,8 +30,8 @@ def u_exact(x):
 
 def weight(x):  # Gaussian function to focus the goal functional on a particular region of the domain
     eps_f = 0.1
-    center_x = 0.5
-    center_y = 0.5
+    center_x = 0.75
+    center_y = 0.75
     r2 = ((x[0] - center_x)**2 + (x[1] - center_y)**2) / eps_f**2.
 
     values = np.zeros_like(x[0])
