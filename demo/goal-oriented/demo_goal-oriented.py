@@ -291,8 +291,13 @@ def estimate_primal(u_h):
 
     eta_h = dolfinx.Function(V_e)
 
+    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+    e_D = dolfinx.Function(V_f_dolfin)
+    e_h = dolfinx.Function(V_f_dolfin)
+
+    # TODO: understand why it works only when e_h and e_D are passed
     fenicsx_error_estimation.estimate(
-        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
     return eta_h
 

@@ -89,7 +89,6 @@ def estimate_primal(u_h):
     a_e = inner(grad(e), grad(v)) * dx
 
     # Linear form
-    V = ufl.FunctionSpace(mesh.ufl_domain(), u_h.ufl_element())
     L_e = inner(jump(grad(u_h), -n), avg(v)) * dS + inner(f + div((grad(u_h))), v) * dx
 
     # Error form
