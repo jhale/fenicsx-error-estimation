@@ -13,9 +13,9 @@ gmsh.option.setNumber("General.Terminal", 0)
 model = gmsh.model()
 model.add("L-shaped")
 
-square = model.occ.addRectangle(0, 0, 0, 1., 1.)
+square = model.occ.addRectangle(0, 0, 0, 2., 2.)
 
-small_square = model.occ.addRectangle(0, 0, 0, 0.5, 0.5)
+small_square = model.occ.addRectangle(0, 0, 0, 1., 1.)
 
 model.occ.cut([(2, square)], [(2, small_square)])
 

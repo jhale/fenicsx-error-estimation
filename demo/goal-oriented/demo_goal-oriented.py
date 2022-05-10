@@ -27,7 +27,7 @@ def main():
         result = {}
 
         def u_exact(x):
-            r = np.sqrt((x[0] - 0.5) * (x[0] - 0.5) + (x[1] - 0.5) * (x[1] - 0.5))
+            r = np.sqrt((x[0] - 1.) * (x[0] - 1.) + (x[1] - 1.) * (x[1] - 1.))
             theta = np.arctan2(x[1], x[0]) + np.pi / 2.
             values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
             values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.),
@@ -296,6 +296,14 @@ def estimate_primal(u_h):
     e_h = dolfinx.Function(V_f_dolfin)
 
     # TODO: understand why it works only when e_h and e_D are passed
+    '''
+    There's something wrong with the module bellow, it sometimes runs but
+    sometimes it doesn't and I get an odd "cffi.VerificationError:
+    CompileError: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit
+    code 1" error.
+    I first thought I needed to pass e_h and e_D to make it works but now it's
+    broken again...
+    '''
     fenicsx_error_estimation.estimate(
         eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
