@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
-CONTAINER_ENGINE="podman"
-#CONTAINER_ENGINE="docker"
+#CONTAINER_ENGINE="podman"
+CONTAINER_ENGINE="docker"
 
 ${CONTAINER_ENGINE} pull fenicsproject/test-env:latest-mpich
 ${CONTAINER_ENGINE} pull dolfinx/dev-env
