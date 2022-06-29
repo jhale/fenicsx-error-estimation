@@ -69,7 +69,7 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_z_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_z)
-        result['error_bw_u'] = np.sqrt(eta_z.vector.sum())
+        result['error_bw_z'] = np.sqrt(eta_z.vector.sum())
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
         J_fine = 0.0326590077
