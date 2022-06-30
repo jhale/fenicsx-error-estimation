@@ -64,7 +64,7 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(z_h)
 
-        '''
+
         # BW estimation primal problem
         print(f"STEP {i}: estimating primal problem...")
         eta_bw_u = estimate_bw(u_h, f)
@@ -72,8 +72,8 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_u)
         result['error_bw_u'] = np.sqrt(eta_bw_u.vector.sum())
-        '''
 
+        '''
         # Residual estimation primal problem
         print(f"STEP {i}: estimating primal problem...")
         eta_res_u = estimate_residual(u_h, f)
@@ -89,8 +89,8 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_u)
         result['error_zz_u'] = np.sqrt(eta_zz_u.vector.sum())
-
         '''
+
         # BW estimation dual problem
         print(f"STEP {i}: estimating dual problem...")
         eta_bw_z = estimate_bw(z_h, weight)
@@ -98,8 +98,8 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_z)
         result['error_bw_z'] = np.sqrt(eta_bw_z.vector.sum())
-        '''
 
+        '''
         # Residual estimation dual problem
         print(f"STEP {i}: estimating primal problem...")
         eta_res_z = estimate_residual(u_h, f)
@@ -115,6 +115,7 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_z)
         result['error_zz_z'] = np.sqrt(eta_zz_z.vector.sum())
+        '''
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
         J_fine = 0.0326590077
@@ -140,15 +141,15 @@ def main():
         result['h_min'] = h_min
         result['num_dofs'] = V.dofmap.index_map.size_global
 
-        '''
+
         # BW WGO estimation
         eta_bw_w = estimate_wgo(eta_bw_u, eta_bw_z)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_bw_w_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_w)
         result['error_bw_w'] = np.sqrt(eta_bw_u.vector.sum() * eta_bw_z.vector.sum())
-        '''
 
+        '''
         # Res WGO estimation
         eta_res_w = estimate_wgo(eta_res_u, eta_res_z)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_res_w_{str(i).zfill(4)}.xdmf", "w") as fo:
@@ -162,10 +163,11 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_w)
         result['error_zz_w'] = np.sqrt(eta_zz_u.vector.sum() * eta_zz_z.vector.sum())
+        '''
 
         # Change eta_bw_w to eta_res_w or eta_zz_w to change the estimator
         # steering the marking
-        markers_tag = marking(eta_res_w)
+        markers_tag = marking(eta_bw_w)
 
         # Refine
         print('Refining...')
