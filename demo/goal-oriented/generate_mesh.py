@@ -7,7 +7,7 @@ from mpi4py import MPI
 
 import gmsh
 
-resolution = 0.1
+resolution = 0.01
 gmsh.initialize()
 gmsh.option.setNumber("General.Terminal", 0)
 model = gmsh.model()
@@ -36,5 +36,5 @@ cells = node_tags[0].reshape(-1, num_nodes) - 1
 
 mesh = create_mesh(MPI.COMM_SELF, cells, x, ufl_mesh_from_gmsh(element_types[0], 2))
 
-with XDMFFile(MPI.COMM_SELF, "mesh.xdmf", "w") as of:
+with XDMFFile(MPI.COMM_SELF, "fine_mesh.xdmf", "w") as of:
     of.write_mesh(mesh)

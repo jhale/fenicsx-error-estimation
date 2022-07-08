@@ -20,7 +20,7 @@ with XDMFFile(MPI.COMM_WORLD, "fine_mesh.xdmf", 'r') as fi:
 
 
 def u_exact(x):
-    r = np.sqrt(x[0] * x[0] + x[1] * x[1])
+    r = np.sqrt((x[0] - 1.) * (x[0] - 1.) + (x[1] - 1.) * (x[1] - 1.))
     theta = np.arctan2(x[1], x[0]) + np.pi / 2.
     values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
     values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.),

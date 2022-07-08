@@ -16,7 +16,6 @@ from fenicsx_error_estimation import create_interpolation
 
 k = 1
 
-
 def main():
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
         mesh = fi.read_mesh()
@@ -118,18 +117,18 @@ def main():
         '''
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
-        J_fine = 0.0326590077
+        J_fine = 5.012494490875276e-06
 
         V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-        c = dolfinx.Function(V_f)
-        c.interpolate(weight)
+        weight_V_f = dolfinx.Function(V_f)
+        weight_V_f.interpolate(weight)
         with XDMFFile(MPI.COMM_WORLD, f"output/c_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
-            fo.write_function(c)
+            fo.write_function(weight_V_f)
 
         dx = ufl.Measure("dx", domain=mesh)
 
-        J_u_h = dolfinx.fem.assemble_scalar(inner(c, u_h) * dx)
+        J_u_h = dolfinx.fem.assemble_scalar(inner(weight_V_f, u_h) * dx)
         result['exact_error'] = np.abs(J_u_h - J_fine)
 
         # Necessary for parallel operation
@@ -140,7 +139,6 @@ def main():
         h_min = MPI.COMM_WORLD.allreduce(h_local, op=MPI.MIN)
         result['h_min'] = h_min
         result['num_dofs'] = V.dofmap.index_map.size_global
-
 
         # BW WGO estimation
         eta_bw_w = estimate_wgo(eta_bw_u, eta_bw_z)
@@ -251,11 +249,11 @@ def solve_dual(V):
     A = dolfinx.fem.assemble_matrix(a, bcs=bcs)
     A.assemble()
 
-    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-    c = dolfinx.Function(V_c)
-    c.interpolate(weight)
+    V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
+    weight_V_f = dolfinx.Function(V_f)
+    weight_V_f.interpolate(weight)
 
-    L = inner(c, v) * dx
+    L = inner(weight_V_f, v) * dx
 
     b = dolfinx.fem.assemble_vector(L)
     dolfinx.fem.apply_lifting(b, [a], [bcs])
@@ -297,20 +295,20 @@ def estimate_bw(u_h, f):
     e = ufl.TrialFunction(V_f)
     v = ufl.TestFunction(V_f)
 
-    n = ufl.FacetNormal(ufl_domain)
+    n = ufl.FacetNormal(mesh)
 
     # Bilinear form
     a_e = inner(grad(e), grad(v)) * dx
 
-    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-    c = dolfinx.Function(V_c)
-    c.interpolate(f)
+    V_w = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
+    weight_V_w = dolfinx.Function(V_w)
+    weight_V_w.interpolate(f)
 
-    L = inner(c, v) * dx
+    L = inner(weight_V_w, v) * dx
 
     # Linear form
     L_e = L + inner(div(grad(u_h)), v) * dx + \
-              inner(jump(grad(u_h), -n), avg(v)) * dS
+        inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -330,15 +328,6 @@ def estimate_bw(u_h, f):
     e_D = dolfinx.Function(V_f_dolfin)
     e_h = dolfinx.Function(V_f_dolfin)
 
-    # TODO: understand why it works only when e_h and e_D are passed
-    '''
-    There's something wrong with the module bellow, it sometimes runs but
-    sometimes it doesn't and I get an odd "cffi.VerificationError:
-    CompileError: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit
-    code 1" error.
-    I first thought I needed to pass e_h and e_D to make it works but now it's
-    broken again...
-    '''
     fenicsx_error_estimation.estimate(
         eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
@@ -357,18 +346,18 @@ def estimate_residual(u_h, f):
     h_T = ufl.CellDiameter(mesh)
     h_E = ufl.FacetArea(mesh)
 
-    V_c = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-    c = dolfinx.Function(V_c)
-    c.interpolate(f)
+    V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
+    f_V_f = dolfinx.Function(V_f)
+    f_V_f.interpolate(f)
 
-    r = c + div(grad(u_h))
+    r = f_V_f + div(grad(u_h))
     J_h = jump(grad(u_h), -n)
 
     V_e = dolfinx.FunctionSpace(mesh, ("DG", 0))
     v_e = ufl.TestFunction(V_e)
 
-    R = h_T**4 * inner(inner(r, r), v_e) * dx + avg(h_E)**3 * inner(inner(J_h,
-                       J_h), avg(v_e)) * dS
+    R = h_T**4 * inner(inner(r, r), v_e) * dx + avg(h_E)**3 * \
+                 inner(inner(J_h, J_h), avg(v_e)) * dS
 
     # Computation of local error indicator
     eta_h = dolfinx.Function(V_e)
@@ -383,7 +372,7 @@ def estimate_zz(u_h, f):
     ufl_domain = mesh.ufl_domain
 
     dx = ufl.Measure('dx', domain=ufl_domain, metadata={"quadrature_rule": "vertex",
-                                                                   "representation": "quadrature"})
+                                                        "representation": "quadrature"})
 
     W = dolfinx.VectorFunctionSpace(mesh, ("CG", 1, 2))
 
@@ -427,8 +416,8 @@ def estimate_wgo(eta_u, eta_z):
     eta_u_vec = eta_u.vector.array
     eta_z_vec = eta_z.vector.array
 
-    sum_eta_u = eta_u.vector.sum
-    sum_eta_z = eta_z.vector.sum
+    sum_eta_u = eta_u.vector.sum()
+    sum_eta_z = eta_z.vector.sum()
 
     eta_w = dolfinx.Function(eta_u.function_space)
     eta_w_vec = ((sum_eta_z / (sum_eta_u + sum_eta_z)) * eta_u_vec) + \
@@ -460,6 +449,7 @@ def marking(eta_w):
     markers = np.zeros(indices.shape, dtype=np.int8)
     markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
     return markers_tag
+
 
 if __name__ == "__main__":
     main()
