@@ -22,7 +22,7 @@ def main():
 
     # Adaptive refinement loop
     results = []
-    for i in range(0, 20):
+    for i in range(0, 10):
         result = {}
 
         def u_exact(x):
@@ -62,7 +62,6 @@ def main():
         with XDMFFile(MPI.COMM_WORLD, f"output/z_h_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(z_h)
-
 
         # BW estimation primal problem
         print(f"STEP {i}: estimating primal problem...")
@@ -129,6 +128,7 @@ def main():
         dx = ufl.Measure("dx", domain=mesh)
 
         J_u_h = dolfinx.fem.assemble_scalar(inner(weight_V_f, u_h) * dx)
+        result['J_u_h'] = J_u_h
         result['exact_error'] = np.abs(J_u_h - J_fine)
 
         # Necessary for parallel operation
@@ -283,8 +283,8 @@ def estimate_bw(u_h, f):
     mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
 
-    dx = ufl.Measure('dx', domain=ufl_domain)
-    dS = ufl.Measure('dS', domain=ufl_domain)
+    dx = ufl.Measure('dx', domain=mesh)
+    dS = ufl.Measure('dS', domain=mesh)
 
     element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
@@ -304,10 +304,8 @@ def estimate_bw(u_h, f):
     weight_V_w = dolfinx.Function(V_w)
     weight_V_w.interpolate(f)
 
-    L = inner(weight_V_w, v) * dx
-
     # Linear form
-    L_e = L + inner(div(grad(u_h)), v) * dx + \
+    L_e = inner(weight_V_w + div(grad(u_h)), v) * dx + \
         inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
