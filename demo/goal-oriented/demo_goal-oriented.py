@@ -16,21 +16,22 @@ from fenicsx_error_estimation import create_interpolation
 
 k = 1
 
+
 def main():
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
         mesh = fi.read_mesh()
 
     # Adaptive refinement loop
     results = []
-    for i in range(0, 10):
+    for i in range(0, 15):
         result = {}
 
         def u_exact(x):
             r = np.sqrt((x[0] - 1.) * (x[0] - 1.) + (x[1] - 1.) * (x[1] - 1.))
-            theta = np.arctan2(x[1], x[0]) + np.pi / 2.
+            theta = np.arctan2((x[1] - 1.), (x[0] - 1.)) + np.pi / 2.
             values = r**(2. / 3.) * np.sin((2. / 3.) * theta)
-            values[np.where(np.logical_or(np.logical_and(np.isclose(x[0], 0., atol=1e-10), x[1] < 0.),
-                                          np.logical_and(np.isclose(x[1], 0., atol=1e-10), x[0] < 0.)))] = 0.
+            values[np.where(np.logical_or(np.logical_and(np.isclose((x[0] - 1.), 0., atol=1e-10), (x[1] - 1.) < 0.),
+                                          np.logical_and(np.isclose((x[1] - 1.), 0., atol=1e-10), (x[0] - 1.) < 0.)))] = 0.
             return values
 
         V = dolfinx.FunctionSpace(mesh, ("CG", k))
@@ -71,7 +72,6 @@ def main():
             fo.write_function(eta_bw_u)
         result['error_bw_u'] = np.sqrt(eta_bw_u.vector.sum())
 
-        '''
         # Residual estimation primal problem
         print(f"STEP {i}: estimating primal problem...")
         eta_res_u = estimate_residual(u_h, f)
@@ -80,6 +80,7 @@ def main():
             fo.write_function(eta_res_u)
         result['error_res_u'] = np.sqrt(eta_res_u.vector.sum())
 
+        '''
         # ZZ estimation primal problem
         print(f"STEP {i}: estimating primal problem...")
         eta_zz_u = estimate_zz(u_h, f)
@@ -116,18 +117,22 @@ def main():
         '''
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
-        J_fine = 5.012494490875276e-06
+        J_fine = 0.2341612424405788
 
         V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
         weight_V_f = dolfinx.Function(V_f)
         weight_V_f.interpolate(weight)
-        with XDMFFile(MPI.COMM_WORLD, f"output/c_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, f"output/weight_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(weight_V_f)
 
+        u_V_f = dolfinx.Function(V_f)
+        u_V_f.interpolate(u_h)
+
         dx = ufl.Measure("dx", domain=mesh)
 
-        J_u_h = dolfinx.fem.assemble_scalar(inner(weight_V_f, u_h) * dx)
+        J_u_h = dolfinx.fem.assemble_scalar(inner(weight_V_f, u_V_f) * dx)
+
         result['J_u_h'] = J_u_h
         result['exact_error'] = np.abs(J_u_h - J_fine)
 
@@ -185,11 +190,11 @@ def weight(x):  # Gaussian function to focus the goal functional on a particular
     eps_f = 0.1
     center_x = 0.75
     center_y = 0.75
-    r2 = ((x[0] - center_x)**2 + (x[1] - center_y)**2) / eps_f**2.
+    r2 = (((x[0] - 1.) - center_x)**2 + ((x[1] - 1.) - center_y)**2) / eps_f**2.
 
     values = np.zeros_like(x[0])
 
-    values = np.exp(- r2)
+    values = np.exp(- r2/10.)
     return values
 
 
