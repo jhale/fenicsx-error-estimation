@@ -80,7 +80,6 @@ def main():
             fo.write_function(eta_res_u)
         result['error_res_u'] = np.sqrt(eta_res_u.vector.sum())
 
-        ''' TODO: test ZZ estimation
         # ZZ estimation primal problem
         print(f"STEP {i}: estimating primal problem (zz)...")
         eta_zz_u = estimate_zz(u_h, f)
@@ -88,7 +87,6 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_u)
         result['error_zz_u'] = np.sqrt(eta_zz_u.vector.sum())
-        '''
 
         # BW estimation dual problem
         print(f"STEP {i}: estimating dual problem (bw)...")
@@ -106,7 +104,7 @@ def main():
             fo.write_function(eta_res_z)
         result['error_res_z'] = np.sqrt(eta_res_z.vector.sum())
 
-        '''
+        
         # ZZ estimation dual problem
         print(f"STEP {i}: estimating dual problem (zz)...")
         eta_zz_z = estimate_zz(u_h, f)
@@ -114,7 +112,7 @@ def main():
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_z)
         result['error_zz_z'] = np.sqrt(eta_zz_z.vector.sum())
-        '''
+        
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
         J_fine = 0.2341612424405788
@@ -159,14 +157,14 @@ def main():
             fo.write_function(eta_res_w)
         result['error_res_w'] = np.sqrt(eta_res_u.vector.sum() * eta_res_z.vector.sum())
 
-        '''
+        
         # ZZ WGO estimation
         eta_zz_w = estimate_wgo(eta_zz_u, eta_zz_z)
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_zz_w_{str(i).zfill(4)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_w)
         result['error_zz_w'] = np.sqrt(eta_zz_u.vector.sum() * eta_zz_z.vector.sum())
-        '''
+        
 
         # Change eta_bw_w to eta_res_w or eta_zz_w to change the estimator
         # steering the marking
@@ -372,10 +370,9 @@ def estimate_zz(u_h, f):
     V = u_h.function_space
     mesh = V.mesh
 
-    dx = ufl.Measure('dx', domain=mesh, metadata={"quadrature_rule": "vertex",
-                                                  "representation": "quadrature"})
+    dx = ufl.Measure('dx', domain=mesh, metadata={"quadrature_rule": "vertex"})
 
-    W = dolfinx.VectorFunctionSpace(mesh, ("CG", 1, 2))
+    W = dolfinx.VectorFunctionSpace(mesh, ("CG", 1), dim=2)
 
     # Global grad recovery
     w_h = ufl.TrialFunction(W)
