@@ -67,7 +67,7 @@ class CMakeBuild(build_ext):
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
 
-        cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
+        cmake_args += ['-DCMAKE_BUILD_TYPE=Debug']
 
         env = os.environ.copy()
         import pybind11
