@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 import mpi4py.MPI as MPI
@@ -18,6 +19,22 @@ k = 1
 
 
 def main():
+    estimator = "bw"
+    parameters = (1, 2)
+
+    adaptive_refinement(estimator, parameters)
+    return
+
+
+def adaptive_refinement(estimator, parameters=None):
+    if estimator != "bw" and parameters is not None:
+        print("Parameters are ignored when the estimator is not 'bw'.")
+
+    if estimator == "bw":
+        estimator_path = "bw_" + str(parameters[0]) + "_" + str(parameters[1])
+    else:
+        estimator_path = estimator
+
     with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", 'r') as fi:
         mesh = fi.read_mesh()
 
@@ -41,7 +58,9 @@ def main():
 
         u_exact_V = dolfinx.Function(V)
         u_exact_V.interpolate(u_exact)
-        with XDMFFile(MPI.COMM_WORLD, f"output/u_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD,
+                      os.path.join("output", estimator_path, f"u_exact_{str(i).zfill(4)}.xdmf"),
+                      "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_exact_V)
 
@@ -51,68 +70,66 @@ def main():
         bcs = [dolfinx.DirichletBC(u_exact_V, dofs)]
 
         # Solve primal problem
-        print(f'STEP {i}: solving primal problem...')
+        print(estimator + " steering " + f"STEP {i}:\n solving primal problem...")
         u_h = solve_primal(V, u_exact_V, bcs)
-        with XDMFFile(MPI.COMM_WORLD, f"output/u_h_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"u_h_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_h)
 
         # Solve dual problem
-        print(f'STEP {i}: solving dual problem...')
+        print(estimator + " steering " + f'STEP {i}:\n solving dual problem...')
         z_h = solve_dual(V)
-        with XDMFFile(MPI.COMM_WORLD, f"output/z_h_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"z_h_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(z_h)
 
         # BW estimation primal problem
-        print(f"STEP {i}: estimating primal problem (bw)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating primal problem (bw)...")
         eta_bw_u = estimate_bw(u_h, f)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_u_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_u_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_u)
         result['error_bw_u'] = np.sqrt(eta_bw_u.vector.sum())
 
         # Residual estimation primal problem
-        print(f"STEP {i}: estimating primal problem (res)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating primal problem (res)...")
         eta_res_u = estimate_residual(u_h, f)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_res_u_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_res_u_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_res_u)
         result['error_res_u'] = np.sqrt(eta_res_u.vector.sum())
 
         # ZZ estimation primal problem
-        print(f"STEP {i}: estimating primal problem (zz)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating primal problem (zz)...")
         eta_zz_u = estimate_zz(u_h, f)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_zz_u_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_zz_u_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_u)
         result['error_zz_u'] = np.sqrt(eta_zz_u.vector.sum())
 
         # BW estimation dual problem
-        print(f"STEP {i}: estimating dual problem (bw)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating dual problem (bw)...")
         eta_bw_z = estimate_bw(z_h, weight)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_z_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_z_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_z)
         result['error_bw_z'] = np.sqrt(eta_bw_z.vector.sum())
 
         # Residual estimation dual problem
-        print(f"STEP {i}: estimating dual problem (res)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating dual problem (res)...")
         eta_res_z = estimate_residual(u_h, f)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_res_z_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_res_z_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_res_z)
         result['error_res_z'] = np.sqrt(eta_res_z.vector.sum())
 
-        
         # ZZ estimation dual problem
-        print(f"STEP {i}: estimating dual problem (zz)...")
+        print(estimator + " steering " + f"STEP {i}:\n estimating dual problem (zz)...")
         eta_zz_z = estimate_zz(u_h, f)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_zz_z_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_zz_z_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_z)
         result['error_zz_z'] = np.sqrt(eta_zz_z.vector.sum())
-        
 
         # Calculated using P3 on a very fine adapted mesh, good to ~10 s.f.
         J_fine = 0.2341612424405788
@@ -120,7 +137,7 @@ def main():
         V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
         weight_V_f = dolfinx.Function(V_f)
         weight_V_f.interpolate(weight)
-        with XDMFFile(MPI.COMM_WORLD, f"output/weight_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"weight_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(weight_V_f)
 
@@ -145,42 +162,47 @@ def main():
 
         # BW WGO estimation
         eta_bw_w = estimate_wgo(eta_bw_u, eta_bw_z)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_bw_w_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_bw_w_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_bw_w)
         result['error_bw_w'] = np.sqrt(eta_bw_u.vector.sum() * eta_bw_z.vector.sum())
 
         # Res WGO estimation
         eta_res_w = estimate_wgo(eta_res_u, eta_res_z)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_res_w_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_res_w_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_res_w)
         result['error_res_w'] = np.sqrt(eta_res_u.vector.sum() * eta_res_z.vector.sum())
 
-        
         # ZZ WGO estimation
         eta_zz_w = estimate_wgo(eta_zz_u, eta_zz_z)
-        with XDMFFile(MPI.COMM_WORLD, f"output/eta_zz_w_{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_zz_w_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(eta_zz_w)
         result['error_zz_w'] = np.sqrt(eta_zz_u.vector.sum() * eta_zz_z.vector.sum())
-        
 
-        # Change eta_bw_w to eta_res_w or eta_zz_w to change the estimator
-        # steering the marking
-        markers_tag = marking(eta_bw_w)
+        # Choose the estimator to steer the adaptive strategy depending on the
+        # parameter
+        if estimator == "bw":
+            eta_w = eta_bw_w
+        elif estimator == "res":
+            eta_w = eta_res_w
+        elif estimator == "zz":
+            eta_w = eta_zz_w
+
+        markers_tag = marking(eta_w)
 
         # Refine
         print('Refining...')
         mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
 
-        with XDMFFile(MPI.COMM_WORLD, f"output/mesh{str(i).zfill(4)}.xdmf", "w") as fo:
+        with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"mesh{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
 
         results.append(result)
 
     df = pandas.DataFrame.from_dict(results)
-    df.to_pickle("output/results.pkl")
+    df.to_pickle(os.path.join("output", estimator_path, "results.pkl"))
     print(df)
 
 
@@ -281,7 +303,7 @@ def solve_dual(V):
     return z_h
 
 
-def estimate_bw(u_h, f):
+def estimate_bw(u_h, f, parameters=(1, 2)):
     V = u_h.function_space
     mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
@@ -289,8 +311,8 @@ def estimate_bw(u_h, f):
     dx = ufl.Measure('dx', domain=mesh)
     dS = ufl.Measure('dS', domain=mesh)
 
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
+    element_f = ufl.FiniteElement("DG", ufl.triangle, parameters[1])
+    element_g = ufl.FiniteElement("DG", ufl.triangle, parameters[0])
     element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
     N = create_interpolation(element_f, element_g)
 
@@ -325,12 +347,12 @@ def estimate_bw(u_h, f):
 
     eta_h = dolfinx.Function(V_e)
 
-    V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-    e_D = dolfinx.Function(V_f_dolfin)
-    e_h = dolfinx.Function(V_f_dolfin)
+    # V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
+    # e_D = dolfinx.Function(V_f_dolfin)
+    # e_h = dolfinx.Function(V_f_dolfin)
 
     fenicsx_error_estimation.estimate(
-        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted) #, e_h=e_h, e_D=e_D)
 
     return eta_h
 
