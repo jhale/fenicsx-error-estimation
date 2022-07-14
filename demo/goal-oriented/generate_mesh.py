@@ -7,7 +7,7 @@ from mpi4py import MPI
 
 import gmsh
 
-resolution = 0.1
+resolution = 1.
 gmsh.initialize()
 gmsh.option.setNumber("General.Terminal", 0)
 model = gmsh.model()
