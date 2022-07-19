@@ -24,7 +24,7 @@ styles = ["^", "x", "o"]
 
 # height = 3.50394 / 1.608
 # width = 3.50394
-plt.rcParams.update({'font.size': 9})
+plt.rcParams.update({'font.size': 10})
 plt.rcParams.update({'lines.markersize': 4})
 plt.rcParams.update({'lines.linewidth': 1.5})
 # plt.rcParams.update({'figure.figsize': [width, height]})
@@ -52,7 +52,7 @@ for (estimator, param1, param2), style in zip(estimators, styles):
                color="black")
     plt.loglog(num_dofs, est_z, style + "--", label=label + " (dual)",
                color="gray")
-    plt.loglog(num_dofs, est_w, style + "-.", label=label + " (wgo)",
+    plt.loglog(num_dofs, est_w, style + ":", label=label + " (wgo)",
                color="silver")
 
     dofs.append(num_dofs.values.tolist())

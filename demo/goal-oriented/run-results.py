@@ -8,10 +8,11 @@ from mpltools import annotation
 from demo_goal_oriented import adaptive_refinement
 
 
-estimators = [("bw", 1, 2),
-              ("bw", 2, 4),
-              ("res", None, None),
-              ("zz", None, None)]
+estimators = []
+
+for i in [0, 1, 2, 3]:
+    for j in [1, 2, 3, 4][i:]:
+        estimators.append(("bw", i, j))
 
 for estimator, param1, param2 in estimators:
     if estimator == "bw":
