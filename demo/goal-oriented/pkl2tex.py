@@ -14,15 +14,19 @@ def main():
 
     for j in [0, 1, 2, 3]:
         for i in [1, 2, 3, 4][j:]:
-            if not (j == 0 and i == 1):
-                df= pd.read_pickle('./output/bw_{}_{}/results.pkl'.format(j,i))
-                print(df)
-                bw_eff = np.round(df['error_bw_w'.format(i,j)].values[-1]/df['exact_error'.format(i,j)].values[-1], 2)
-                print(f"bw_{j}_{i}_eff =", bw_eff)
-                tikzfig.write('\\def\\{}{}{{{}}};\n'.format(alph[j], alph[i], bw_eff))
+            df= pd.read_pickle(f'./output_minimal/bw_{j}_{i}/results.pkl')
+            print(df)
+            est_w = df["error_bw_u"].values[-1] * df["error_bw_z"].values[-1]
+            bw_eff = np.round(est_w/df['exact_error'].values[-1], 2)
+            print(f"bw_{j}_{i}_eff =", bw_eff)
+            tikzfig.write('\\def\\{}{}{{{}}};\n'.format(alph[j], alph[i], bw_eff))
     for i, name in enumerate(['res', 'zz']):
-        df= pd.read_pickle('./output/{}/results.pkl'.format(name))
-        est_eff = np.round(df['error_{}_w'.format(name)].values[-1]/df['exact_error'.format(name)].values[-1], 2)
+        df= pd.read_pickle('./output_minimal/{}/results.pkl'.format(name))
+        print(df)
+        est_w = df["error_{}_u".format(name)].values[-1] * \
+        df["error_{}_z".format(name)].values[-1]
+        est_eff = np.round(est_w/df['exact_error'.format(name)].values[-1], 2)
+        print(f"{name}_eff =", est_eff)
         tikzfig.write('\\def\\{}{}{{{}}};\n'.format('o', alph[i], est_eff))
     template = open('P1_template.tex', 'r')
     for line in template:

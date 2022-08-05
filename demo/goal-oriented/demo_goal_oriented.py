@@ -119,7 +119,7 @@ def adaptive_refinement(estimator, parameters=None):
 
             # Residual estimation dual problem
             print(estimator + " steering " + f"STEP {i}:\n estimating dual problem (res)...")
-            eta_res_z = estimate_residual(z_h, weight)
+            eta_res_z = estimate_residual(z_h)
             with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_res_z_{str(i).zfill(4)}.xdmf"), "w") as fo:
                 fo.write_mesh(mesh)
                 fo.write_function(eta_res_z)
@@ -134,7 +134,7 @@ def adaptive_refinement(estimator, parameters=None):
         elif estimator == "zz":
             # ZZ estimation primal problem
             print(estimator + " steering " + f"STEP {i}:\n estimating primal problem (zz)...")
-            eta_zz_u = estimate_zz(u_h, f)
+            eta_zz_u = estimate_zz(u_h)
             with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_zz_u_{str(i).zfill(4)}.xdmf"), "w") as fo:
                 fo.write_mesh(mesh)
                 fo.write_function(eta_zz_u)
@@ -142,7 +142,7 @@ def adaptive_refinement(estimator, parameters=None):
 
             # ZZ estimation dual problem
             print(estimator + " steering " + f"STEP {i}:\n estimating dual problem (zz)...")
-            eta_zz_z = estimate_zz(z_h, weight)
+            eta_zz_z = estimate_zz(z_h)
             with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"eta_zz_z_{str(i).zfill(4)}.xdmf"), "w") as fo:
                 fo.write_mesh(mesh)
                 fo.write_function(eta_zz_z)
@@ -164,6 +164,7 @@ def adaptive_refinement(estimator, parameters=None):
         with XDMFFile(MPI.COMM_WORLD, os.path.join("output", estimator_path, f"weight_{str(i).zfill(4)}.xdmf"), "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(weight_V_f)
+        # weight_V_f = weight
 
         u_V_f = dolfinx.Function(V_f)
         u_V_f.interpolate(u_h)
@@ -280,6 +281,7 @@ def solve_dual(V):
     V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
     weight_V_f = dolfinx.Function(V_f)
     weight_V_f.interpolate(weight)
+    # weight_V_f = weight
 
     L = inner(weight_V_f, v) * dx
 
@@ -306,13 +308,13 @@ def solve_dual(V):
     return z_h
 
 
-def estimate_bw(u_h, f, parameters=(1, 2)):
+def estimate_bw(u_h, f, parameters=(1, 2), dual=False):
     V = u_h.function_space
     mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
 
-    dx = ufl.Measure('dx', domain=mesh)
-    dS = ufl.Measure('dS', domain=mesh)
+    dx = ufl.Measure('dx', domain=ufl_domain)
+    dS = ufl.Measure('dS', domain=ufl_domain)
 
     element_f = ufl.FiniteElement("DG", ufl.triangle, parameters[1])
     element_g = ufl.FiniteElement("DG", ufl.triangle, parameters[0])
@@ -329,12 +331,15 @@ def estimate_bw(u_h, f, parameters=(1, 2)):
     a_e = inner(grad(e), grad(v)) * dx
 
     V_w = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-    weight_V_w = dolfinx.Function(V_w)
-    weight_V_w.interpolate(f)
+    if not dual:
+        weight_V_w = dolfinx.Function(V_w)
+        weight_V_w.interpolate(f)
+    else:
+        weight_V_w = f
 
     # Linear form
     L_e = inner(weight_V_w + div(grad(u_h)), v) * dx + \
-        inner(jump(grad(u_h), -n), avg(v)) * dS
+          inner(jump(grad(u_h), -n), avg(v)) * dS
 
     # Error form
     V_e = dolfinx.FunctionSpace(mesh, element_e)
@@ -350,17 +355,13 @@ def estimate_bw(u_h, f, parameters=(1, 2)):
 
     eta_h = dolfinx.Function(V_e)
 
-    # V_f_dolfin = dolfinx.FunctionSpace(mesh, element_f)
-    # e_D = dolfinx.Function(V_f_dolfin)
-    # e_h = dolfinx.Function(V_f_dolfin)
-
     fenicsx_error_estimation.estimate(
-        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted) #, e_h=e_h, e_D=e_D)
+        eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted)
 
     return eta_h
 
 
-def estimate_residual(u_h, f):
+def estimate_residual(u_h, f, dual=False):
     V = u_h.function_space
     mesh = V.mesh
 
@@ -372,8 +373,11 @@ def estimate_residual(u_h, f):
     h_E = ufl.FacetArea(mesh)
 
     V_f = dolfinx.FunctionSpace(mesh, ("CG", k + 2))
-    f_V_f = dolfinx.Function(V_f)
-    f_V_f.interpolate(f)
+    if not dual:
+        f_V_f = dolfinx.Function(V_f)
+        f_V_f.interpolate(f)
+    else:
+        f_V_f = f
 
     r = f_V_f + div(grad(u_h))
     J_h = jump(grad(u_h), -n)
@@ -391,7 +395,7 @@ def estimate_residual(u_h, f):
     return eta_h
 
 
-def estimate_zz(u_h, f):
+def estimate_zz(u_h):
     V = u_h.function_space
     mesh = V.mesh
 

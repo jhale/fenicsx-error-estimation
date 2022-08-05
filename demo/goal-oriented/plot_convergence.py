@@ -42,7 +42,7 @@ for (estimator, param1, param2), style in zip(estimators, styles):
         estimator_path = estimator
         label = f"$\eta_{{\mathrm{{{estimator}}}}}$"
 
-    df = pd.read_pickle(os.path.join("output", estimator_path, "results.pkl"))
+    df = pd.read_pickle(os.path.join("output_minimal", estimator_path, "results.pkl"))
     num_dofs = df["num_dofs"][11:]
     est_u = df["error_" + estimator + "_u"][11:]
     est_z = df["error_" + estimator + "_z"][11:]
@@ -52,7 +52,7 @@ for (estimator, param1, param2), style in zip(estimators, styles):
                color="black")
     plt.loglog(num_dofs, est_z, style + "--", label=label + " (dual)",
                color="gray")
-    plt.loglog(num_dofs, est_w, style + ":", label=label + " (wgo)",
+    plt.loglog(num_dofs, est_u * est_z, style + ":", label=label + " (wgo)",
                color="silver")
 
     dofs.append(num_dofs.values.tolist())
@@ -87,7 +87,7 @@ marker_x, marker_y = marker([0.5, 0.3],
                             [df["exact_error"].median(), df["exact_error"].tail(1).item()])
 annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
 '''
-df = pd.read_pickle("output/bw_1_2/results.pkl")
+df = pd.read_pickle("output_minimal/bw_1_2/results.pkl")
 num_dofs = df["num_dofs"].values.tolist()[11:]
 est_z = df["error_bw_z"].values.tolist()[11:]
 
@@ -96,32 +96,32 @@ marker_x, marker_y = marker([0.5, 0.2],
                             [np.median(est_z), est_z[-1:]])
 annotation.slope_marker((marker_x[0], marker_y[0]), (-1, 2), invert=True)
 
-df = pd.read_pickle("output/bw_1_2/results.pkl")
+df = pd.read_pickle("output_minimal/bw_1_2/results.pkl")
 num_dofs = df["num_dofs"].values.tolist()[11:]
-est_z = df["error_bw_w"].values.tolist()[11:]
+est_z = np.asarray(df["error_bw_u"].values.tolist()[11:]) *\
+        np.asarray(df["error_bw_z"].values.tolist()[11:])
 
 marker_x, marker_y = marker([0.5, 0.3],
                             [np.median(num_dofs), num_dofs[-1:]],
                             [np.median(est_z), est_z[-1:]])
 annotation.slope_marker((marker_x[0], marker_y[0]), (-2, 2), invert=True)
 
-df = pd.read_pickle("output/res/results.pkl")
+df = pd.read_pickle("output_minimal/res/results.pkl")
 num_dofs = df["num_dofs"].values.tolist()[11:]
-est_z = df["error_res_w"].values.tolist()[11:]
+est_z = np.asarray(df["error_res_u"].values.tolist()[11:]) * \
+        np.asarray(df["error_res_z"].values.tolist()[11:])
 
 marker_x, marker_y = marker([0.5, 0.3],
                             [np.median(num_dofs), num_dofs[-1:]],
                             [np.median(est_z), est_z[-1:]])
 annotation.slope_marker((marker_x[0], marker_y[0]), (-2, 2), invert=True)
 
-df = pd.read_pickle("output/res/results.pkl")
-num_dofs = df["num_dofs"].values.tolist()[11:]
-est_z = df["error_res_w"].values.tolist()[11:]
+est_z = np.asarray(df["error_res_z"].values.tolist()[11:])
 
-marker_x, marker_y = marker([0.5, 0.3],
+marker_x, marker_y = marker([0.5, 0.2],
                             [np.median(num_dofs), num_dofs[-1:]],
                             [np.median(est_z), est_z[-1:]])
-annotation.slope_marker((marker_x[0], marker_y[0]), (-2, 2), invert=True)
+annotation.slope_marker((marker_x[0], marker_y[0]), (-1, 2), invert=True)
 
 marker_x, marker_y = marker([0.5, 0.3],
                             [np.median(dofs), dofs[-1:]],
