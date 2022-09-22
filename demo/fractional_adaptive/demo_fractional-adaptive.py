@@ -12,7 +12,7 @@ import dolfinx
 import ufl
 from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
                          dirichletbc, form, locate_dofs_topological, set_bc)
-from dolfinx.fem.petsc import assemble_matrix, assemble_vector
+from dolfinx.fem.petsc import assemble_matrix, assemble_vector, create_vector, create_matrix
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import (CellType, compute_incident_entities,
                           create_rectangle, locate_entities_boundary)
@@ -151,13 +151,13 @@ while np.greater(eta, tol):
     boundary_entities_sorted = np.sort(boundary_entities)
 
     # Fractional solution
-    u_h = Function(V)
+    u_h = Function(V, name="fractional_solution")
     # Parametric solution
-    u_param = Function(V)
+    u_param = Function(V, name="parametric_solution")
     # Bank-Weiser error solution for fractional problem
-    bw_f = Function(V_f)
+    bw_f = Function(V_f, name="bank_weiser_error")
     # L^2 error estimator for fractional problem proposed in Bulle et al. 2022
-    eta_e = Function(V_e)
+    eta_e = Function(V_e, name="error_indicator")
 
     # Functions to store results
     # L2 norm of parametric Bank-Weiser solution (unused in this methodology)
@@ -166,14 +166,20 @@ while np.greater(eta, tol):
     e_D = Function(V_f)     # Zero dirichlet boundary condition
     e_D.vector.set(0.0)    # Zero dirichlet boundary condition
 
+    A = create_matrix(a_form)
+    b = create_vector(L_form)
+
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
         # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
-        # TODO: Sparsity pattern could be moved outside loop
-        A = assemble_matrix(a_form, bcs=bcs)
+
+        b.zeroEntries()
+        A.zeroEntries()
+
+        assemble_matrix(A, a_form, bcs=bcs)
         A.assemble()
-        b = assemble_vector(L_form)
+        assemble_vector(L_form, b)
 
         u_param.vector.set(0.0)
         apply_lifting(b, [a_form], [bcs])
@@ -220,27 +226,27 @@ while np.greater(eta, tol):
     # Scale fractional solution
     print(f'Refinement step {ref_step}: Solution computation and solve...')
     u_h.vector.scale(constant)
-    with XDMFFile(mesh.comm, f"./output/u_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/u_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(u_h)
 
     # Scale Bank-Weiser solution
     print(f'Refinement step {ref_step}: Estimator computation and solve...')
     bw_f.vector.scale(constant)
-    with XDMFFile(mesh.comm, f"./output/bw_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/bw_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(bw_f)
 
     # Compute L2 error estimator
     eta_f = assemble_vector(form(inner(inner(bw_f, bw_f), v_e) * dx))
     eta_e.vector.setArray(eta_f)
-    with XDMFFile(mesh.comm, f"./output/eta_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/eta_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(eta_e)
 
     # Compute L2 error estimator
     # TODO: Not MPI safe
-    eta = np.sqrt(sum(eta_e.vector.array))
+    eta = np.sqrt(eta_e.vector.sum())
     print(f'Refinement step: {ref_step}: Error:', eta)
 
     # Dörfler marking
