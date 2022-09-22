@@ -1,5 +1,6 @@
 # Copyright 2020, Jack S. Hale
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import fenicsx_error_estimation
 import numpy as np
 
 import dolfinx
@@ -9,8 +10,6 @@ from dolfinx.fem import (Function, FunctionSpace, assemble_scalar, dirichletbc,
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
 from ufl import avg, div, grad, inner, jump, pi, sin
-
-import fenicsx_error_estimation
 
 from mpi4py import MPI
 

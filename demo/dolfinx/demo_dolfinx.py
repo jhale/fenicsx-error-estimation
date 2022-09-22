@@ -6,9 +6,8 @@ from fenicsx_error_estimation import create_interpolation, estimate
 
 import dolfinx
 import ufl
-from dolfinx.fem import (Function, FunctionSpace, assemble_scalar,
-                         dirichletbc, form,
-                         locate_dofs_topological)
+from dolfinx.fem import (Function, FunctionSpace, assemble_scalar, dirichletbc,
+                         form, locate_dofs_topological)
 from dolfinx.fem.petsc import LinearProblem, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary

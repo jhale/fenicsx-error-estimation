@@ -12,7 +12,7 @@ import dolfinx
 import ufl
 from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
                          dirichletbc, form, locate_dofs_topological, set_bc)
-from dolfinx.fem.petsc import assemble_matrix, assemble_vector, create_vector, create_matrix
+from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import (CellType, compute_incident_entities,
                           create_rectangle, locate_entities_boundary)

@@ -4,8 +4,9 @@ import numpy as np
 from fenicsx_error_estimation import create_interpolation, estimate
 
 import ufl
-from dolfinx.fem import (Function, FunctionSpace, apply_lifting, assemble_scalar,
-                         dirichletbc, form, locate_dofs_topological, set_bc)
+from dolfinx.fem import (Function, FunctionSpace, apply_lifting,
+                         assemble_scalar, dirichletbc, form,
+                         locate_dofs_topological, set_bc)
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import create_unit_cube, locate_entities_boundary
