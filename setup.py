@@ -4,16 +4,10 @@ import os
 import shlex
 import sys
 import sysconfig
-import platform
 import subprocess
-import multiprocessing
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
-
-if sys.version_info < (3, 7):
-    print("Python 3.7 or higher required, please upgrade.")
-    sys.exit(1)
 
 VERSION = "0.5.0.dev0"
 URL = ""
@@ -39,8 +33,6 @@ Operating System :: POSIX :: Linux
 Operating System :: MacOS :: MacOS X
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.7
-Programming Language :: Python :: 3.8
 Topic :: Scientific/Engineering :: Mathematics
 """
 
@@ -92,7 +84,7 @@ class CMakeBuild(build_ext):
 
 def run_install():
     setup(name="fenicsx_error_estimation",
-          description="Implicit and a posteriori error estimates in FEniCSx",
+          description="Implicit a posteriori error estimators in FEniCSx",
           version=VERSION,
           author=AUTHORS,
           classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
@@ -106,6 +98,11 @@ def run_install():
           cmdclass=dict(build_ext=CMakeBuild),
           platforms=["Linux", "Mac OS-X", "Unix"],
           install_requires=REQUIREMENTS,
+          setup_requires=["pybind11"],
+          extras_require={"demos": ["pandas", "mpltools", "matplotlib"],
+                          "lint": ["isort", "flake8"],
+                          "test": ["pytest"],
+                          "ci": ["fenicsx_error_estimation[demos]", "fenicsx_error_estimation[lint]", "fenicsx_error_estimation[test]"]},
           zip_safe=False)
 
 
