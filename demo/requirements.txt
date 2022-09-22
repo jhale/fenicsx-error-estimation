@@ -1,5 +1,0 @@
-matplotlib
-meshio
-mpltools
-pandas
-pygmsh
