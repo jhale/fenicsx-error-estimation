@@ -34,8 +34,8 @@ void projected_local_solver(
     double diagonal = 1.0)
 {
   const auto mesh = a.mesh();
-  assert(mesh == L.mesh());
-  assert(mesh == L_eta.mesh());
+  // assert(mesh == L.mesh());
+  // assert(mesh == L_eta.mesh());
 
   // Local tensors
   const int element_space_dimension = element.space_dimension();
@@ -61,6 +61,7 @@ void projected_local_solver(
 
   // Check assumptions on integrals.
   using type = fem::IntegralType;
+  /*
   assert(a.num_integrals(type::cell) == 1);
   assert(a.num_integrals(type::interior_facet) == 0);
   assert(a.num_integrals(type::exterior_facet) == 0);
@@ -69,7 +70,7 @@ void projected_local_solver(
   assert(L.num_integrals(type::cell) == 1);
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
-
+  */
   const auto& a_kernel_domain_integral = a.kernel(type::cell, -1);
   const auto& L_kernel_domain_integral = L.kernel(type::cell, -1);
   std::function<void(T*, const T*, const T*, const double*, const int*,

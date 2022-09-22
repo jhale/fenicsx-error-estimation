@@ -31,7 +31,7 @@ V = FunctionSpace(mesh, element)
 dx = ufl.Measure("dx", domain=mesh)
 
 x = ufl.SpatialCoordinate(mesh)
-f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+# f = 8.0 * pi**2 * sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
 
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
@@ -54,7 +54,8 @@ with XDMFFile(MPI.COMM_WORLD, "output/u.xdmf", "w") as of:
     of.write_mesh(mesh)
     of.write_function(u_h)
 
-u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+# u_exact = sin(2.0 * pi * x[0]) * sin(2.0 * pi * x[1])
+u_exact = x[0]**2 + x[1]**2
 error = MPI.COMM_WORLD.allreduce(assemble_scalar(
     inner(grad(u_h - u_exact), grad(u_h - u_exact)) * dx(degree=k + 3)), op=MPI.SUM)
 print("True error: {}".format(np.sqrt(error)))
