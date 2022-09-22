@@ -143,12 +143,7 @@ void projected_local_solver(
 
   // Extract coefficients
   const auto& [a_coeffs_cell, a_cstride] = a_coeffs.at({fem::IntegralType::cell, -1});
-  const auto& [L_coeffs_cell, L_cell_cstride] = L_coeffs.at({fem::IntegralType::cell, -1});
-  const auto& [L_coeffs_if, L_if_cstride] = L_coeffs.at({fem::IntegralType::interior_facet, -1});
-  std::cout << L_coeffs_if.size() << std::endl;
-  std::cout << L_if_cstride;
-  for (auto value: L_coeffs_if) { std::cout << value << " " << std::endl; }
-  //const auto& [L_coeffs_ef, L_ef_cstride] = L_coeffs.at({fem::IntegralType::exterior_facet, -1});
+  const auto& [L_coeffs_cell, L_cstride] = L_coeffs.at({fem::IntegralType::cell, -1});
 
   for (int c = 0; c < num_cells; ++c)
   {
@@ -164,7 +159,7 @@ void projected_local_solver(
     std::fill(be.begin(), be.end(), 0.0);
 
     const double* a_coeff_cell = a_coeffs_cell.data() + c * a_cstride;
-    const double* L_coeff_cell = L_coeffs_cell.data() + c * L_cell_cstride;
+    const double* L_coeff_cell = L_coeffs_cell.data() + c * L_cstride;
     a_kernel_domain_integral(Ae.begin(), a_coeff_cell, a_constants.data(),
                              coordinate_dofs.data(), nullptr, nullptr);
     L_kernel_domain_integral(be.begin(), L_coeff_cell, L_constants.data(),
@@ -196,6 +191,14 @@ void projected_local_solver(
       {
         // Is interior facet
         std::array<int, 2> local_facets;
+        for (int k = 0; k < 2; ++k)
+        {
+          const auto c_f = c_to_f->links(f_c[k]);
+          const auto* end = c_f.data() + c_f.size();
+          const auto* it = std::find(c_f.data(), end, f);
+          assert(it != end);
+          local_facets[k] = std::distance(c_f.data(), it);
+        }
 
         // Orientation
         const std::array perm{perms[f_c[0] * c_f.size() + local_facets[0]],
@@ -216,11 +219,27 @@ void projected_local_solver(
             std::next(x_g.begin(), 3 * x_dofs1[i]),
             xt::view(coordinate_dofs_macro, 1, i, xt::all()).begin());
         }
+        // Layout for the restricted coefficients is flattened
+        // w[coefficient][restriction][dof]
+        const double* L_coeff_cell0 = L_coeffs_cell.data() + f_c[0] * L_cstride;
+        const double* L_coeff_cell1 = L_coeffs_cell.data() + f_c[1] * L_cstride;
+
+        // Loop over coefficients for L
+        for (std::size_t i = 0; i < L_offsets.size() - 1; ++i)
+        {
+          // Loop over entries for coefficient i
+          const int num_entries = L_offsets[i + 1] - L_offsets[i];
+          std::copy_n(L_coeff_cell0 + L_offsets[i], num_entries,
+                      std::next(L_coeff_array_macro.begin(), 2 * L_offsets[i]));
+          std::copy_n(L_coeff_cell1 + L_offsets[i], num_entries,
+                      std::next(L_coeff_array_macro.begin(),
+                                L_offsets[i + 1] + L_offsets[i]));
+        }
 
         std::fill(b_macro.begin(), b_macro.end(), 0.0);
-	std::cout << f << std::endl;
+
         L_kernel_interior_facet(
-            b_macro.data(), L_coeffs_if.data() + f * 2 * L_if_cstride, L_constants.data(),
+            b_macro.data(), L_coeff_array_macro.data(), L_constants.data(),
             coordinate_dofs_macro.data(), local_facets.data(), perm.data());
 
         // Assemble appropriate part of A_macro/b_macro into Ae/be.

@@ -23,7 +23,7 @@ ffi = cffi.FFI()
 def primal():
     mesh = create_rectangle(
         MPI.COMM_WORLD,
-        [np.array([0, 0]), np.array([1, 1])], [2, 2],
+        [np.array([0, 0]), np.array([1, 1])], [32, 32],
         CellType.triangle, dolfinx.mesh.GhostMode.shared_facet)
 
     element = ufl.FiniteElement("CG", ufl.triangle, 1)
@@ -107,7 +107,6 @@ def estimate_primal(u_h):
     e_h = Function(V_f_dolfin)
 
     estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
-    print(eta_h.x.array)
 
     # Ghost update is not strictly necessary on DG_0 space but left anyway
     eta_h.x.scatter_forward()
