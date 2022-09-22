@@ -14,11 +14,11 @@ from ufl import avg, div, grad, inner, jump, pi, sin
 from mpi4py import MPI
 from petsc4py import PETSc
 
-k = 2
+k = 1
 
 
 def primal():
-    mesh = create_unit_cube(MPI.COMM_WORLD, 32, 32, 32)
+    mesh = create_unit_cube(MPI.COMM_WORLD, 64, 64, 64)
 
     element = ufl.FiniteElement("CG", ufl.tetrahedron, k)
     V = FunctionSpace(mesh, element)

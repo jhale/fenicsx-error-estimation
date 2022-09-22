@@ -7,9 +7,9 @@ from fenicsx_error_estimation import create_interpolation, estimate
 import dolfinx
 import ufl
 from dolfinx.fem import (Function, FunctionSpace, assemble_scalar,
-                         assemble_vector, dirichletbc, form,
+                         dirichletbc, form,
                          locate_dofs_topological)
-from dolfinx.fem.petsc import LinearProblem
+from dolfinx.fem.petsc import LinearProblem, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import CellType, create_rectangle, locate_entities_boundary
 from ufl import avg, div, grad, inner, jump, pi, sin
@@ -108,15 +108,12 @@ def estimate_primal(u_h):
 
     estimate(eta_h, a_e, L_e, L_eta, N, boundary_entities_sorted, e_h=e_h, e_D=e_D)
 
-    # Ghost update is not strictly necessary on DG_0 space but left anyway
-    eta_h.x.scatter_forward()
     print("Bank-Weiser error from estimator (C++): {}".format(np.sqrt(eta_h.vector.sum())))
 
     # Try assembling L_eta from e_h directly
-    #L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
-    #eta_h_2 = assemble_vector(form(L_eta))
-    #eta_h_2.scatter_forward()
-    #print("Bank-Weiser error from estimator: {}".format(np.sqrt(np.sum(eta_h_2.sum())))
+    L_eta = inner(inner(grad(e_h), grad(e_h)), v_e) * dx
+    eta_h_2 = assemble_vector(form(L_eta))
+    print("Bank-Weiser error from estimator (C++): {}".format(np.sqrt(eta_h_2.sum())))
 
     with XDMFFile(mesh.comm, "output/eta.xdmf", "w") as of:
         of.write_mesh(mesh)
@@ -214,7 +211,6 @@ def estimate_primal_python(u_h):
     # Permutations (global)
     mesh.topology.create_entity_permutations()
     perms = mesh.topology.get_facet_permutations()
-    cell_info = mesh.topology.get_cell_permutation_info()
 
     # Permutations (local)
     perm = np.zeros(2, dtype=np.uint8)
@@ -292,8 +288,8 @@ def estimate_primal_python(u_h):
             for j in range(0, 2):
                 c = x_dofs.links(cells[j])
                 for k in range(3):
-                    for l in range(2):
-                        geometry_macro[j, k, l] = x[c[k], l]
+                    for m in range(2):
+                        geometry_macro[j, k, m] = x[c[k], m]
 
             # Pack coefficients.
             # TODO: Generalise.

@@ -3,7 +3,6 @@
 import fenicsx_error_estimation
 import numpy as np
 
-import dolfinx
 import ufl
 from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar,
                          form)
@@ -20,7 +19,7 @@ from mpi4py import MPI
 
 mesh = create_rectangle(
     MPI.COMM_WORLD,
-    [np.array([0, 0]), np.array([1, 1])], [4, 4],
+    [np.array([0, 0]), np.array([1, 1])], [32, 32],
     CellType.triangle)
 
 k = 1
@@ -54,7 +53,6 @@ element_f = ufl.FiniteElement("DG", ufl.triangle, k + 1)
 element_g = ufl.FiniteElement("DG", ufl.triangle, k)
 element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
 N = fenicsx_error_estimation.create_interpolation(element_f, element_g)
-print(N)
 # The local error estimation problem is written in pure UFL. This allows us to
 # avoid making a dolfinx.FunctionSpace on the high-order discontinuous Galerkin
 # space, which can use a lot of memory in three-dimensions.
@@ -88,8 +86,6 @@ eta_h = Function(V_e)
 # that no Dirichlet conditions are applied to the local Bank-Weiser problems.
 facets = np.array([], dtype=np.int32)
 fenicsx_error_estimation.estimate(eta_h, a_e, L_e, L_eta, N, facets)
-
-print(eta_h.x.array)
 
 print("Bank-Weiser error from estimator: {}".format(np.sqrt(eta_h.vector.sum())))
 

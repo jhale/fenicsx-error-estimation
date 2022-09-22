@@ -62,7 +62,8 @@ def main():
         V_e = eta_h.function_space
         eta_exact = Function(V_e, name="eta_exact")
         v = ufl.TestFunction(V_e)
-        eta = dolfinx.fem.petsc.assemble_vector(form(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx))
+        eta = dolfinx.fem.petsc.assemble_vector(
+            form(inner(inner(grad(u_h - u_exact_V), grad(u_h - u_exact_V)), v) * dx))
         eta_exact.vector.setArray(eta)
         result['error'] = np.sqrt(np.sum(eta_exact.vector.array))
         with XDMFFile(MPI.COMM_WORLD, f"output/eta_exact_{str(i).zfill(4)}.xdmf", "w") as fo:
