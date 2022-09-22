@@ -166,20 +166,14 @@ while np.greater(eta, tol):
     e_D = Function(V_f)     # Zero dirichlet boundary condition
     e_D.vector.set(0.0)    # Zero dirichlet boundary condition
 
-    A = create_matrix(a_form)
-    b = create_vector(L_form)
-
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
         # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
 
-        b.zeroEntries()
-        A.zeroEntries()
-
-        assemble_matrix(A, a_form, bcs=bcs)
+        A = assemble_matrix(a_form, bcs=bcs)
         A.assemble()
-        assemble_vector(L_form, b)
+        b = assemble_vector(L_form)
 
         u_param.vector.set(0.0)
         apply_lifting(b, [a_form], [bcs])
