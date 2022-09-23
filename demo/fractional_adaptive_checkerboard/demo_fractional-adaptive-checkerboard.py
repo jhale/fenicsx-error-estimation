@@ -21,6 +21,7 @@ from ufl import (Coefficient, Measure, TestFunction, TrialFunction, avg, div,
 
 from mpi4py import MPI
 from petsc4py import PETSc
+import pandas as pd
 
 # Fractional power (in (0, 1))
 s = 0.5
@@ -30,7 +31,7 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 1e-3
+tol = 5e-4
 # Dorfler marking parameter
 theta = 0.3
 
@@ -38,7 +39,7 @@ theta = 0.3
 # Structured mesh
 mesh = create_rectangle(
     MPI.COMM_WORLD,
-    [np.array([0.0, 0.0]), np.array([1.0, 1.0])], [4, 4],
+    [np.array([0, 0, 0]), np.array([1, 1, 0])], [8, 8],
     CellType.triangle)
 
 
@@ -98,6 +99,7 @@ print(f"Proposed kappa: {kappa}")
 eta = 1.
 
 ref_step = 0
+results = {"dof num": [], "L2 bw": []}
 while np.greater(eta, tol):
     ufl_domain = mesh.ufl_domain()
 
@@ -106,6 +108,8 @@ while np.greater(eta, tol):
     V = FunctionSpace(mesh, element)
     u = TrialFunction(V)
     v = TestFunction(V)
+
+    results["dof num"].append(V.dofmap.index_map.size_global)
 
     element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
     element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
@@ -241,6 +245,7 @@ while np.greater(eta, tol):
     # Compute L2 error estimator
     # TODO: Not MPI safe
     eta = np.sqrt(eta_e.vector.sum())
+    results["L2 bw"].append(eta)
     print(f'Refinement step: {ref_step}: Error:', eta)
 
     # Dörfler marking
@@ -267,3 +272,7 @@ while np.greater(eta, tol):
     mesh = dolfinx.mesh.refine(mesh, edges)
 
     ref_step += 1
+
+    df = pd.DataFrame.from_dict(results, orient="index").transpose()
+    print(df)
+    df.to_csv("./results.csv")
