@@ -15,7 +15,7 @@ from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import (CellType, compute_incident_entities,
-                          create_rectangle, locate_entities_boundary)
+                          create_rectangle, create_unit_square, locate_entities_boundary)
 from ufl import (Coefficient, Measure, TestFunction, TrialFunction, avg, div,
                  grad, inner, jump)
 
@@ -37,10 +37,7 @@ theta = 0.3
 
 
 # Structured mesh
-mesh = create_rectangle(
-    MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [8, 8],
-    CellType.triangle)
+mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
 
 
 def f_e(x):
