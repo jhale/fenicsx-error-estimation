@@ -1,7 +1,7 @@
 # Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import pygmsh as pg
 import meshio
+import pygmsh as pg
 
 lc = 0.5
 
@@ -37,7 +37,7 @@ for cell in mesh.cells:
         triangle_cells = cell.data
 
 meshio.write("./mesh.xdmf", meshio.Mesh(
-    points = mesh.points,
+    points=mesh.points,
     cells={"triangle": triangle_cells}))
 
 '''

@@ -48,8 +48,10 @@ void projected_local_solver(
   xt::xtensor<T, 1> be_0, xe_0, xe;
 
   // Prepare coefficients
-  const auto [a_coeffs, a_cstride] = pack_coefficients(a);
-  const auto [L_coeffs, L_cstride] = pack_coefficients(L);
+  auto a_coeffs = allocate_coefficient_storage(a);
+  auto L_coeffs = allocate_coefficient_storage(L);
+  pack_coefficients(a, a_coeffs);
+  pack_coefficients(L, L_coeffs);
 
   const std::vector<int> L_offsets = L.coefficient_offsets();
   std::vector<T> L_coeff_array_macro(2 * L_offsets.back());
@@ -66,7 +68,6 @@ void projected_local_solver(
   assert(a.num_integrals(type::exterior_facet) == 0);
   assert(L.num_integrals(type::cell) == 1);
   assert(L.num_integrals(type::interior_facet) == 1);
-  assert(L.num_integrals(type::cell) == 1);
   assert(L_eta.num_integrals(type::interior_facet) == 0);
   assert(L_eta.num_integrals(type::exterior_facet) == 0);
 
@@ -92,7 +93,7 @@ void projected_local_solver(
 
   // FIXME: Add proper interface for num coordinate dofs
   const std::size_t num_dofs_g = x_dofmap.num_links(0);
-  const xt::xtensor<double, 2>& x_g = mesh->geometry().x();
+  const xtl::span<const double> x_g = mesh->geometry().x();
   std::vector<double> coordinate_dofs(num_dofs_g * 3);
   xt::xtensor<double, 3> coordinate_dofs_macro({2, num_dofs_g, 3});
 
@@ -140,21 +141,25 @@ void projected_local_solver(
   const auto cell_type = mesh->topology().cell_type();
   const int num_facets = mesh::cell_num_entities(cell_type, tdim - 1);
 
+  // Extract coefficients
+  const auto& [a_coeffs_cell, a_cstride] = a_coeffs.at({fem::IntegralType::cell, -1});
+  const auto& [L_coeffs_cell, L_cstride] = L_coeffs.at({fem::IntegralType::cell, -1});
+
   for (int c = 0; c < num_cells; ++c)
   {
     // Get cell vertex coordinates
     auto x_dofs = x_dofmap.links(c);
-
+    
     for (std::size_t i = 0; i < x_dofs.size(); ++i)
     {
-      std::copy_n(xt::row(x_g, x_dofs[i]).begin(), 3,
-                  std::next(coordinate_dofs.begin(), i * 3));
+      common::impl::copy_N<3>(std::next(x_g.begin(), 3 * x_dofs[i]),
+                              std::next(coordinate_dofs.begin(), 3 * i));
     }
     std::fill(Ae.begin(), Ae.end(), 0.0);
     std::fill(be.begin(), be.end(), 0.0);
 
-    const double* a_coeff_cell = a_coeffs.data() + c * a_cstride;
-    const double* L_coeff_cell = L_coeffs.data() + c * L_cstride;
+    const double* a_coeff_cell = a_coeffs_cell.data() + c * a_cstride;
+    const double* L_coeff_cell = L_coeffs_cell.data() + c * L_cstride;
     a_kernel_domain_integral(Ae.begin(), a_coeff_cell, a_constants.data(),
                              coordinate_dofs.data(), nullptr, nullptr);
     L_kernel_domain_integral(be.begin(), L_coeff_cell, L_constants.data(),
@@ -203,20 +208,21 @@ void projected_local_solver(
         auto x_dofs0 = x_dofmap.links(f_c[0]);
         for (std::size_t i = 0; i < x_dofs0.size(); ++i)
         {
-          std::copy_n(xt::view(x_g, x_dofs0[i]).begin(), 3,
-                      xt::view(coordinate_dofs_macro, 0, i, xt::all()).begin());
+          common::impl::copy_N<3>(
+            std::next(x_g.begin(), 3 * x_dofs0[i]),
+            xt::view(coordinate_dofs_macro, 0, i, xt::all()).begin());
         }
-        auto x_dofs1 = x_dofmap.links(f_c[1]);
+	auto x_dofs1 = x_dofmap.links(f_c[1]);
         for (std::size_t i = 0; i < x_dofs1.size(); ++i)
         {
-          std::copy_n(xt::view(x_g, x_dofs1[i]).begin(), 3,
-                      xt::view(coordinate_dofs_macro, 1, i, xt::all()).begin());
+          common::impl::copy_N<3>(
+            std::next(x_g.begin(), 3 * x_dofs1[i]),
+            xt::view(coordinate_dofs_macro, 1, i, xt::all()).begin());
         }
-
         // Layout for the restricted coefficients is flattened
         // w[coefficient][restriction][dof]
-        const double* L_coeff_cell0 = L_coeffs.data() + f_c[0] * L_cstride;
-        const double* L_coeff_cell1 = L_coeffs.data() + f_c[1] * L_cstride;
+        const double* L_coeff_cell0 = L_coeffs_cell.data() + f_c[0] * L_cstride;
+        const double* L_coeff_cell1 = L_coeffs_cell.data() + f_c[1] * L_cstride;
 
         // Loop over coefficients for L
         for (std::size_t i = 0; i < L_offsets.size() - 1; ++i)
@@ -309,12 +315,12 @@ PYBIND11_MODULE(cpp, m)
 {
   xt::import_numpy();
   m.def("projected_local_solver_have_fine_space",
-        &projected_local_solver<PetscScalar, true>,
+        &projected_local_solver<double, true>,
         "Local solves on projected finite element space. Computes Bank-Weiser "
         "error solution. Allows imposition of Dirichlet boundary conditions "
         "on Bank-Weiser error solution.")
       .def("projected_local_solver_no_fine_space",
-           &projected_local_solver<PetscScalar, false>,
+           &projected_local_solver<double, false>,
            "Local solves on projected finite element space. Does not compute "
            "Bank-Weiser error solution. Dirichlet condition on Bank-Weiser "
            "error solution is always zero.");

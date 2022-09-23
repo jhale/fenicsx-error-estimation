@@ -5,48 +5,111 @@
 # element scheme outlined in Bulle et al. 2022. The problem specification is
 # taken from Bonito and Pasciak 2013.
 
+import pickle
+
 import fenicsx_error_estimation
+import gmsh
 import numpy as np
 
 import dolfinx
 import ufl
-from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
+from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar, apply_lifting,
                          dirichletbc, form, locate_dofs_topological, set_bc)
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector
-from dolfinx.io import XDMFFile
+from dolfinx.io import XDMFFile, gmshio
 from dolfinx.mesh import (CellType, compute_incident_entities,
-                          create_rectangle, create_unit_square, locate_entities_boundary)
+                          create_rectangle, locate_entities_boundary)
 from ufl import (Coefficient, Measure, TestFunction, TrialFunction, avg, div,
                  grad, inner, jump)
 
 from mpi4py import MPI
 from petsc4py import PETSc
-import pandas as pd
+from slepc4py import SLEPc
 
 # Fractional power (in (0, 1))
 s = 0.5
-# Lower bound on spectrum of the Laplacian operator on square
-lmbda_0 = 1.
 # Finite element degree
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 1e-5
+tol = 1e-2
 # Dorfler marking parameter
 theta = 0.3
 
+# Torus mesh
+gmsh.initialize()
 
-# Structured mesh
-mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
+torus = gmsh.model.occ.addTorus(0.0, 0.0, 0.0, 1.0, 0.3)
+gmsh.model.occ.synchronize()
+gdim = 3
+gmsh.model.addPhysicalGroup(gdim, [torus], 1)
+gmsh.option.setNumber("Mesh.CharacteristicLengthMin", 0.1)
+gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 0.1)
+gmsh.model.mesh.generate(gdim)
 
+mesh, cell_markers, facet_markers = gmshio.model_to_mesh(gmsh.model, MPI.COMM_WORLD, 0, gdim=gdim)
 
+# Find lowest eigenvalue of standard Laplacian. There are good techniques to
+# cheaply compute a lower bound, could be interesting for future work.
+# FE spaces
+element = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
+V = FunctionSpace(mesh, element)
+u = TrialFunction(V)
+v = TestFunction(V)
+
+dx = Measure("dx", mesh)
+
+a = inner(grad(u), grad(v))*dx
+m = inner(u, v)*dx
+
+# Homogeneous zero Dirichlet boundary condition
+u0 = Function(V)
+u0.vector.set(0.0)
+facets = locate_entities_boundary(
+    mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+dofs = locate_dofs_topological(V, 1, facets)
+bcs = [dirichletbc(u0, dofs)]
+
+A = assemble_matrix(form(a), bcs=bcs)
+A.assemble()
+M = assemble_matrix(form(m), bcs=bcs, diagonal=0.01)
+M.assemble()
+
+eps = SLEPc.EPS().create()
+eps.setOperators(A, M)
+
+options = PETSc.Options()
+options["eps_type"] = "krylovschur"
+options["eps_gen_hermitian"] = ""
+options["eps_smallest_real"] = ""
+options["eps_target"] = 66.0 # From coarse mesh analysis
+options["eps_view"] = ""
+options["eps_monitor_all"] = ""
+eps.setFromOptions()
+
+eps.solve()
+
+num_converged = eps.getConverged()
+eigenvalues_unsorted = np.zeros(num_converged, dtype=np.complex128)
+
+for i in range(0, num_converged):
+    eigenvalues_unsorted[i] = eps.getEigenvalue(i)
+
+# Non-guaranteed lower bound on spectrum of the Laplacian operator
+lmbda_0 = eigenvalues_unsorted[0] - 1.0
+
+# Compute L^2 norm of data f
 def f_e(x):
-    """Checkerboard problem data"""
+    """Constant loading"""
     values = np.ones(x.shape[1])
-    values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
-    values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
     return values
 
+f_h = Function(V)
+f_h.interpolate(f_e)
+norm_f_h = inner(f_h, f_h)*dx
+f_e_L2_norm = np.sqrt(assemble_scalar(form(norm_f_h)))
+
+del(V)
 
 # Find kappa s.t. rational approx. error < tol * 1e-3 * || f_e || according to
 # a priori result in Bonito and Pasciak 2013
@@ -82,7 +145,6 @@ def bp_sum(lmbda, kappa, s):
     return q, c_1s, c_2s, weights, constant
 
 
-f_e_L2_norm = 1.
 tol_rs = tol * 1e-3 * f_e_L2_norm
 trial_kappas = np.flip(np.arange(1e-2, 1., step=0.01))
 for kappa in trial_kappas:
@@ -90,12 +152,13 @@ for kappa in trial_kappas:
     diff = np.abs(lmbda_0 ** (-s) - q)
     if np.less(diff, tol_rs):
         break
-
+print(f"Proposed kappa: {kappa}")
 # Initialize estimator value
 eta = 1.
 
 ref_step = 0
-results = {"dof num": [], "L2 bw": []}
+results = []
+
 while np.greater(eta, tol):
     ufl_domain = mesh.ufl_domain()
 
@@ -105,11 +168,9 @@ while np.greater(eta, tol):
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    results["dof num"].append(V.dofmap.index_map.size_global)
-
-    element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-    element_g = ufl.FiniteElement("DG", ufl.triangle, 1)
-    element_e = ufl.FiniteElement("DG", ufl.triangle, 0)
+    element_f = ufl.FiniteElement("DG", mesh.ufl_cell(), 2)
+    element_g = ufl.FiniteElement("DG", mesh.ufl_cell(), 1)
+    element_e = ufl.FiniteElement("DG", mesh.ufl_cell(), 0)
     V_f = FunctionSpace(mesh, element_f)
     e_f = TrialFunction(V_f)
     v_f = TestFunction(V_f)
@@ -241,8 +302,12 @@ while np.greater(eta, tol):
     # Compute L2 error estimator
     # TODO: Not MPI safe
     eta = np.sqrt(eta_e.vector.sum())
-    results["L2 bw"].append(eta)
     print(f'Refinement step: {ref_step}: Error:', eta)
+
+    result = {}
+    result["error_bw"] = eta
+    result["num_dofs"] = V.dofmap.index_map.size_global
+    results.append(result)
 
     # Dörfler marking
     print(f'Refinement step: {ref_step} Marking...')
@@ -260,16 +325,16 @@ while np.greater(eta, tol):
 
     refine_cells = sorted_cells[0:breakpoint + 1]
     indices = np.array(np.sort(refine_cells), dtype=np.int32)
-    edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 1)
+    edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 2)
 
     # Refine mesh
     print(f'Refinement step {ref_step}: Refinement...')
-    mesh.topology.create_entities(mesh.topology.dim - 1)
-    mesh = dolfinx.mesh.refine(mesh, edges)
+    mesh.topology.create_entities(mesh.topology.dim - 2)
+    mesh = dolfinx.mesh.refine(mesh, facets)
 
     ref_step += 1
 
-df = pd.DataFrame.from_dict(results, orient="index").transpose()
-print(df)
-df.to_csv("./results.csv")
-print(f"Proposed kappa: {kappa}")
+print(results)
+
+with open('output/results.pickle', 'wb') as handle:
+    pickle.dump(results, handle)

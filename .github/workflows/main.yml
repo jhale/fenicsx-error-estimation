@@ -3,13 +3,13 @@ on: [push]
 jobs:
   ci:
     runs-on: ubuntu-latest
-    container: jhale/fenicsx-error-estimation:debug
+    container: fenicsproject/test-env:mpich-v0.5.1
     name: CI
     steps:
       - uses: actions/checkout@v2
       - name: Install
         run: |
-          python3 -m pip -v install .
+          python3 -m pip -v install '.[ci]'
       - name: Run demos 
         run: |
           cd demo

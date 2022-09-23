@@ -1,25 +1,21 @@
 # Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
 import os
+import shlex
 import sys
-import platform
+import sysconfig
 import subprocess
-import multiprocessing
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
-if sys.version_info < (3, 7):
-    print("Python 3.7 or higher required, please upgrade.")
-    sys.exit(1)
-
-VERSION = "0.3.0.dev0"
+VERSION = "0.5.0.dev0"
 URL = ""
 
 REQUIREMENTS = [
     "numpy",
     "scipy",
-    "fenics-dolfinx>=0.3.0.dev0",
+    "fenics-dolfinx>=0.5.0<0.6.0",
 ]
 
 AUTHORS = """\
@@ -37,8 +33,6 @@ Operating System :: POSIX :: Linux
 Operating System :: MacOS :: MacOS X
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.7
-Programming Language :: Python :: 3.8
 Topic :: Scientific/Engineering :: Mathematics
 """
 
@@ -62,27 +56,35 @@ class CMakeBuild(build_ext):
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-        cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir]
+        cmake_args = shlex.split(os.environ.get("CMAKE_ARGS", ""))
+        cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
+                       '-DPython3_EXECUTABLE=' + sys.executable,
+                       f'-DPython3_LIBRARIES={sysconfig.get_config_var("LIBDEST")}',
+                       f'-DPython3_INCLUDE_DIRS={sysconfig.get_config_var("INCLUDEPY")}']
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
-
         cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
 
         env = os.environ.copy()
+        # default to 3 build threads
+        if "CMAKE_BUILD_PARALLEL_LEVEL" not in env:
+            env["CMAKE_BUILD_PARALLEL_LEVEL"] = "3"
+
         import pybind11
         env['pybind11_DIR'] = pybind11.get_cmake_dir()
-        env['CXXFLAGS'] = '{}'.format(env.get('CXXFLAGS', ''))
+        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get('CXXFLAGS', ''),
+                                                              self.distribution.get_version())
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
-        subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
+        subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp, env=env)
 
 
 def run_install():
     setup(name="fenicsx_error_estimation",
-          description="Implicit and a posteriori error estimates in FEniCSx",
+          description="Implicit a posteriori error estimators in FEniCSx",
           version=VERSION,
           author=AUTHORS,
           classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
@@ -96,6 +98,13 @@ def run_install():
           cmdclass=dict(build_ext=CMakeBuild),
           platforms=["Linux", "Mac OS-X", "Unix"],
           install_requires=REQUIREMENTS,
+          setup_requires=["pybind11"],
+          extras_require={"demos": ["mpltools", "matplotlib", "pandas", "slepc4py"],
+                          "lint": ["isort", "flake8"],
+                          "test": ["pytest"],
+                          "ci": ["fenicsx_error_estimation[demos]",
+                                 "fenicsx_error_estimation[lint]",
+                                 "fenicsx_error_estimation[test]"]},
           zip_safe=False)
 
 

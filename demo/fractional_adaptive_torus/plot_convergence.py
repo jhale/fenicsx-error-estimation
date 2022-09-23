@@ -4,6 +4,7 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pickle
 from mpltools import annotation
 
 
@@ -17,38 +18,24 @@ def marker(coefficients, anchors_x, anchors_y):
 
 dark_map = [cm.get_cmap('Dark2')(i / 8.) for i in range(8)]
 
-df = pd.read_pickle("output/results.pkl")
-print(df)
+with open('output/results.pickle', 'rb') as handle:
+    results = pickle.load(handle)
+df = pd.DataFrame.from_dict(results)
 
-height = 3.50394 / 1.608
-width = 3.50394
-plt.rcParams.update({'font.size': 8})
+height = 2.8
+width = 4.0
+plt.rcParams.update({'font.size': 6})
 plt.rcParams.update({'lines.markersize': 5})
 plt.rcParams.update({'figure.figsize': [width, height]})
 plt.rcParams.update({'figure.autolayout': True})
 fig = plt.figure()
 plt.loglog(df["num_dofs"], df["error_bw"], '^-',
-           label=r"$\eta_{\mathrm{bw}}$", color=dark_map[3])
-plt.loglog(df["num_dofs"], df["error"], '^--',
-           label=r"$\eta_{\mathrm{e}}$", color=dark_map[2])
-plt.xlabel("Number of dofs")
-plt.ylabel(r"$\eta$")
+           label=r"$\eta^{\mathrm{bw}}_{\kappa}$", color=dark_map[3])
+plt.xlabel("dofs")
+plt.ylabel(r"$\eta^{\mathrm{bw}}_{\kappa}$")
 marker_x, marker_y = marker([0.5, 0.2], [df["num_dofs"].median(), df["num_dofs"].tail(1).item()], [
                             df["error_bw"].median(), df["error_bw"].tail(1).item()])
-annotation.slope_marker((marker_x, marker_y), (-1, 2), invert=True)
-plt.legend()
+annotation.slope_marker((marker_x, marker_y), (-1, 3), invert=True)
+#plt.legend()
+plt.tight_layout()
 plt.savefig("output/error.pdf")
-fig = plt.figure()
-eff_bw = np.divide(df["error"].values, df["error_bw"].values)
-x = np.arange(len(eff_bw))
-
-height = 3.50394 / 1.608
-width = 3.50394
-plt.rcParams.update({'font.size': 8})
-plt.rcParams.update({'lines.markersize': 5})
-plt.rcParams.update({'figure.figsize': [width, height]})
-plt.rcParams.update({'figure.autolayout': True})
-fig = plt.figure()
-plt.plot(x, eff_bw, '^-', label="Efficiency BW")
-plt.legend()
-plt.savefig("output/efficiency.pdf")
