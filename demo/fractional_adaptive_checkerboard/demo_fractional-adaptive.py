@@ -32,7 +32,7 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 5e-4
+tol = 1e-5
 # Dorfler marking parameter
 theta = 0.3
 
@@ -94,7 +94,6 @@ for kappa in trial_kappas:
     diff = np.abs(lmbda_0 ** (-s) - q)
     if np.less(diff, tol_rs):
         break
-print(f"Proposed kappa: {kappa}")
 
 # Initialize estimator value
 eta = 1.
@@ -275,6 +274,7 @@ while np.greater(eta, tol):
 
     ref_step += 1
 
-    df = pd.DataFrame.from_dict(results, orient="index").transpose()
-    print(df)
-    df.to_csv("./results.csv")
+df = pd.DataFrame.from_dict(results, orient="index").transpose()
+print(df)
+df.to_csv("./results.csv")
+print(f"Proposed kappa: {kappa}")

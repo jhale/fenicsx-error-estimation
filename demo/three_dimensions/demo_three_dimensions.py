@@ -24,7 +24,7 @@ from ufl.algorithms.elementtransformations import change_regularity
 
 ffi = cffi.FFI()
 
-k = 2 
+k = 2
 
 
 def primal():
