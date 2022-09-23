@@ -41,10 +41,9 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
     make install && \
     rm -rf /src/xtensor-python
 
-RUN python3 -m pip install pip setuptools --upgrade && \
-    python3 -m pip install git+git://github.com/FEniCS/basix.git@v0.5.1 && \
-    python3 -m pip install git+git://github.com/FEniCS/ufl.git@2022.2.0 && \
-    python3 -m pip install git+git://github.com/FEniCS/ffcx.git@0.5.0.post0
+RUN python3 -m pip install git+https://github.com/FEniCS/basix.git@v0.5.1 && \
+    python3 -m pip install git+https://github.com/FEniCS/ufl.git@2022.2.0 && \
+    python3 -m pip install git+https://github.com/FEniCS/ffcx.git@v0.5.0.post0
 
 ENV PETSC_DIR=/usr/local/petsc
 ENV PETSC_ARCH=linux-gnu-real-32
