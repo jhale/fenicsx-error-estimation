@@ -99,10 +99,12 @@ def run_install():
           platforms=["Linux", "Mac OS-X", "Unix"],
           install_requires=REQUIREMENTS,
           setup_requires=["pybind11"],
-          extras_require={"demos": ["pandas", "mpltools", "matplotlib"],
+          extras_require={"demos": ["mpltools", "matplotlib", "pandas", "slepc4py"],
                           "lint": ["isort", "flake8"],
                           "test": ["pytest"],
-                          "ci": ["fenicsx_error_estimation[demos]", "fenicsx_error_estimation[lint]", "fenicsx_error_estimation[test]"]},
+                          "ci": ["fenicsx_error_estimation[demos]",
+                                 "fenicsx_error_estimation[lint]",
+                                 "fenicsx_error_estimation[test]"]},
           zip_safe=False)
 
 
