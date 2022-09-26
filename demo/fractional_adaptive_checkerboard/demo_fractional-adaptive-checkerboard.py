@@ -31,13 +31,13 @@ lmbda_0 = 1.
 k = 1
 # Tolerance (tolerance for rational sum will be tol * 1e-3 * l2_norm_data,
 # tolerance for FE will be tol)
-tol = 5e-4
+tol = 1e-4
 # Dorfler marking parameter
 theta = 0.3
 
 
 # Structured mesh
-mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
+mesh = create_unit_square(MPI.COMM_WORLD, 32, 32)
 
 
 def f_e(x):
@@ -272,4 +272,4 @@ while np.greater(eta, tol):
 
     df = pd.DataFrame.from_dict(results, orient="index").transpose()
     print(df)
-    df.to_csv("./results.csv")
+    df.to_csv("./output/results.csv")
