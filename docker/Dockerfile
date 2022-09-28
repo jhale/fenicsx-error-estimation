@@ -43,7 +43,8 @@ RUN git clone https://github.com/xtensor-stack/xtensor-python.git && \
 
 RUN python3 -m pip install git+https://github.com/FEniCS/basix.git@v0.5.1 && \
     python3 -m pip install git+https://github.com/FEniCS/ufl.git@2022.2.0 && \
-    python3 -m pip install git+https://github.com/FEniCS/ffcx.git@v0.5.0.post0
+    python3 -m pip install git+https://github.com/FEniCS/ffcx.git@v0.5.0.post0 && \
+    python3 -m pip install pandas
 
 ENV PETSC_DIR=/usr/local/petsc
 ENV PETSC_ARCH=linux-gnu-real-32
