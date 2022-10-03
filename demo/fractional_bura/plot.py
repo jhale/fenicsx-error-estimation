@@ -25,15 +25,11 @@ def marker(x_data, y_datas, position, gap):
         * (anchor_1[0]/anchor_2[0])**gap
     return marker_x, marker_y
 
-def plot(xs, ys, method):
+def slopes(xs, ys, method):
     A = np.vstack([np.log(xs), np.ones_like(xs)]).T
 
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
     print(f"Estimator slope ({method}): {m}")
-
-    last_ys = ys[::-5]
-    print(last_ys)
-    plt.loglog(xs, ys, "^--", label=f"L2 bw ({method})")
 
 
 df_bp = pd.read_csv(f"./results_bp.csv")
@@ -46,9 +42,11 @@ xs_bura = df_bura["dof num"].values
 ys_bura = df_bura["L2 bw"].values
 
 plt.figure()
-plot(xs_bp, ys_bp, "bp")
-plot(xs_bura, ys_bura, "bura")
-plt.loglog(xs_bp, xs_bp**(-1.), "-", label=f"slope -1")
+slopes(xs_bp, ys_bp, "BP")
+slopes(xs_bura, ys_bura, "BURA")
+plt.loglog(xs_bp, ys_bp, "^--", label="L2 bw (BP)")
+plt.loglog(xs_bura, ys_bura, "^-.", label="L2 bw (BURA)")
+plt.loglog(xs_bp, xs_bp**(-1.), "-", label="slope -1")
 plt.legend()
 plt.xlabel("dof")
 plt.ylabel("L2 bw")

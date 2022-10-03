@@ -3,6 +3,7 @@
 
 import fenicsx_error_estimation
 import numpy as np
+import baryrat as br
 
 import dolfinx
 import ufl
@@ -19,9 +20,18 @@ from mpi4py import MPI
 from petsc4py import PETSc
 import pandas as pd
 
-method = "bura"   # methods "bp" or "bura"
 
-def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta):
+def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta=0.3):
+    """
+    Uses Dörfler marking to refine the mesh based on the values of the estimator.
+    Parameters:
+        mesh: the initial mesh on which the estimator has been computed
+        sq_local_estimator: the square root of the local contributions of the estimator
+        global_estimtor: the global estimator
+        theta: the Dörfler marking parameter (the standard value is theta=0.3)
+    Returns:
+        mesh: the refined mesh.
+    """
     # Dörfler marking
     eta_global = global_estimator**2
     cutoff = theta * eta_global
@@ -46,21 +56,65 @@ def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta):
     return mesh
 
 
-def rational_approximation(lmbda, kappa, s):
+def BURA_rational_approximation(degree, s):
+    """
+    Generates the parameters for the BURA using the BRASIL method from Hofreither 2020.
+
+    Parameters:
+        degree: degree of the rational approximation (= number of parametric solves - 1)
+        s: fractional power
+    Returns a dict containing:
+        rational_parameters: dict containing
+            c_1s: diffusion coefficients of the rational sum
+            c_2s: reaction coefficients of the rational sum
+            weights: multiplicative coefficients of the rational sum
+            constant: multiplicative constant in front of the sum
+        initial_constant: once the parametric solutions are added initial_constant * f must be added to this sum to obtain the fractional approximation
+        err: the rational approximation error estimation
+    """
+
+    def r(x):           # BURA method approximate x^s instead of x^{-s}
+        return x**s
+
+    domain = [1e-8, 1.] # The upper bound is lambda_1^{-1} where lambda_1 is the lowest eigenvalue, in this case lambda_1 = 1
+    xs = np.linspace(domain[0], 1., 10000)
+
+    r_brasil = br.brasil(r, domain, (degree-1,degree)) # (degree-1, degree) gives the best result
+    pol_brasil, res_brasil = r_brasil.polres()
+
+    c_1s = np.abs(pol_brasil)
+    c_2s = np.ones_like(c_1s)
+    weights = res_brasil/c_1s
+    constant = 1.
+
+    rational_parameters = {"c_1s": c_1s, "c_2s": c_2s,
+                        "weights": weights,
+                        "constant": constant}
+
+    initial_constant = np.sum(-res_brasil/c_1s)
+
+    # Rational error estimation
+    err = np.max(np.abs(r(xs) - r_brasil(xs)))
+
+    return rational_parameters, initial_constant, err
+
+
+def BP_rational_approximation(kappa, s):
     """
     Generates the parameters for the rational sum according to exponentially
     convergent scheme in Bonito and Pasciak 2013.
 
     Parameters:
-        lmbda: eigenvalue at which the sum is evaluated
         kappa: fineness parameter
         s: fractional power
 
-    Returns:
-        c_1s: diffusion coefficients of the rational sum
-        c_2s: reaction coefficients of the rational sum
-        weights: multiplicative coefficients of the rational sum
-        constant: multiplicative constant in front of the sum
+    Returns a dict containing:
+        rational_parameters: a dict containing:
+            c_1s: diffusion coefficients of the rational sum
+            c_2s: reaction coefficients of the rational sum
+            weights: multiplicative coefficients of the rational sum
+            constant: multiplicative constant in front of the sum
+        err: the rational approximation error estimation
     """
     rational_parameters = {"c_1s": None, "c_2s": None, "weights": None,
                            "constant": 0}
@@ -69,12 +123,29 @@ def rational_approximation(lmbda, kappa, s):
     N = np.ceil((np.pi**2) / (4. * (1. - s) * kappa**2))
 
     ls = np.arange(-M, N + 1, 1, dtype=np.float64)
-    rational_parameters["c_1s"] = np.exp(2. * kappa * ls)
-    rational_parameters["c_2s"] = np.ones_like(ls)
-    rational_parameters["weights"] = np.exp(2. * s * kappa * ls)
-    rational_parameters["constant"] = (2. * np.sin(np.pi * s) * kappa) / np.pi
+    c_1s = np.exp(2. * kappa * ls)
+    c_2s = np.ones_like(c_1s)
+    weights = np.exp(2. * s * kappa * ls)
+    constant = (2. * np.sin(np.pi * s) * kappa) / np.pi
 
-    return rational_parameters
+    rational_parameters = {"c_1s": c_1s, "c_2s": c_2s, "weights": weights,
+                           "constant": constant}
+    
+    # Rational error estimation
+    xs = np.linspace(1., 1e8, 10000)
+
+    ys = []
+    for x in xs:
+        bp_terms = np.multiply(weights, np.reciprocal(c_2s + c_1s * x))
+        bp_sum = np.sum(bp_terms)
+        bp_sum *= constant
+        ys.append(bp_sum)
+    
+    err = np.max(np.abs(np.power(xs, -s) - ys))
+
+    initial_constant = 0.   # There is no initial term in this method so initial_constant must be 0.
+
+    return rational_parameters, initial_constant, err
 
 
 def parametric_problem(f, V, k, rational_parameters, bcs,
@@ -193,8 +264,6 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 def main():
     # Fractional power in (0, 1)
     s = 0.5
-    # Lowest eigenvalue of the Laplacian
-    lower_bound_eigenvalues = 1.
     # Finite element degree
     k = 1
     # Number adaptive refinements
@@ -212,28 +281,18 @@ def main():
         values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
         return values
 
+    rational_parameters, initial_constant, rational_error = rational_approximation(parameter, s)
 
-    if method == "bp":
-        # Rational approximation scheme (BP)
-        fineness_param = 0.35
-        rational_parameters = rational_approximation(lower_bound_eigenvalues,
-                                                     fineness_param, s)
-    elif method == "bura":
-        # Rational approximation scheme (BURA)
-        brasil_bura_parameters = pd.read_csv("./brasil_bura_coefs.csv")
-        fineness_param = brasil_bura_parameters["degree"].values
-        residuals = brasil_bura_parameters["residuals"].values
-        c_1s = brasil_bura_parameters["poles"].values
-        c_2s = np.ones_like(c_1s)
-
-        rational_parameters = {"c_1s": np.abs(c_1s), "c_2s": c_2s,
-                               "weights": residuals/c_1s,
-                               "constant": 1.}
-
-        C_N = np.sum(-residuals/c_1s)
+    print(f"Rational approximation method: {method}")
+    print(f"Method parameter: {parameter}")
+    parameters = rational_parameters["c_1s"]
+    print(f"Number of terms: {len(parameters)}")
+    print(f"Method coefficients: {parameters}")
+    print(f"Rational error: {rational_error}")
+    input(f"Press Enter to continue")
 
     # Results storage
-    results = {"dof num": [], "L2 bw": []}
+    results = {"dof num": [], "L2 bw": [], "rational error": []}
     for ref_step in range(num_refinement_steps):
         dx = Measure("dx", domain=mesh)
 
@@ -279,10 +338,11 @@ def main():
                                              boundary_entities_sorted, a_form,
                                              L_form, cst_1, cst_2,
                                              ref_step=ref_step)
-        if method == "bura":
-            f_V = Function(V)
-            f_V.interpolate(f_e)
-            u_h.vector.array += C_N * f_V.vector.array
+
+        # If method == "bp" then this step is useless (intial_constant=0.)
+        f_V = Function(V)
+        f_V.interpolate(f_e)
+        u_h.vector.array += initial_constant * f_V.vector.array
 
         # Estimator steering the refinement
         bw_sq_local_estimator = estimators["L2 squared local BW"]
@@ -303,6 +363,7 @@ def main():
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
+        results["rational error"].append(rational_error)
 
         df = pd.DataFrame(results)
         df.to_csv(f"results_{method}.csv")
@@ -310,4 +371,19 @@ def main():
 
 
 if __name__ == "__main__":
+    method = "bura"   # methods "bp" or "bura"
+
+    if method == "bp":
+        parameter = 0.27    # Fineness parameter (in (0., 1.), more precise if close to 0.)
+        # For coarse scheme
+        # parameter = 2.5   # (3 solves, error ~ 0.06)
+        rational_approximation = BP_rational_approximation
+
+
+    elif method == "bura":
+        parameter = 16      # Degree of the rational approximation (integer, more precise if large)
+        # For coarse scheme
+        # parameter = 3     # (3 solves, error ~ 0.005)
+        rational_approximation = BURA_rational_approximation
+
     main()
