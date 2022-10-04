@@ -262,12 +262,10 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 
 
 def main():
-    # Fractional power in (0, 1)
-    s = 0.5
     # Finite element degree
     k = 1
     # Number adaptive refinements
-    num_refinement_steps = 15
+    num_refinement_steps = 18
     # Dorfler marking parameter
     theta = 0.3
 
@@ -281,18 +279,22 @@ def main():
         values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
         return values
 
-    rational_parameters, initial_constant, rational_error = rational_approximation(parameter, s)
+    if method == "bp":
+        parameter = 1.
+    elif method == "bura":
+        parameter = 1
 
-    print(f"Rational approximation method: {method}")
-    print(f"Method parameter: {parameter}")
-    parameters = rational_parameters["c_1s"]
-    print(f"Number of terms: {len(parameters)}")
-    print(f"Method coefficients: {parameters}")
-    print(f"Rational error: {rational_error}")
-    input(f"Press Enter to continue")
+    rational_error = np.Inf
+    while(rational_error > 1e-5):
+        if method == "bp":
+            parameter -= 0.01
+        elif method == "bura":
+            parameter += 1
+
+        rational_parameters, initial_constant, rational_error = rational_approximation(parameter, s)
 
     # Results storage
-    results = {"dof num": [], "L2 bw": [], "rational error": []}
+    results = {"dof num": [], "rational parameter": [], "num solves": [], "L2 bw": [], "rational error": []}
     for ref_step in range(num_refinement_steps):
         dx = Measure("dx", domain=mesh)
 
@@ -364,26 +366,27 @@ def main():
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
         results["rational error"].append(rational_error)
+        results["rational parameter"].append(parameter)
+        results["num solves"].append(len(rational_parameters["c_1s"]))
 
         df = pd.DataFrame(results)
-        df.to_csv(f"results_{method}.csv")
+        df.to_csv(f"results_{method}_{str(s)[-1]}.csv")
         print(df)
 
 
 if __name__ == "__main__":
-    method = "bura"   # methods "bp" or "bura"
+    for method in ["bp", "bura"]:
+        for s in [0.3, 0.5, 0.7]:
+            if method == "bp":
+                parameter = 0.4    # Fineness parameter (in (0., 1.), more precise if close to 0.)
+                # For coarse scheme
+                # parameter = 2.5   # (3 solves, error ~ 0.06)
+                rational_approximation = BP_rational_approximation
 
-    if method == "bp":
-        parameter = 0.27    # Fineness parameter (in (0., 1.), more precise if close to 0.)
-        # For coarse scheme
-        # parameter = 2.5   # (3 solves, error ~ 0.06)
-        rational_approximation = BP_rational_approximation
+            elif method == "bura":
+                parameter = 9      # Degree of the rational approximation (integer, more precise if large)
+                # For coarse scheme
+                # parameter = 3     # (3 solves, error ~ 0.005)
+                rational_approximation = BURA_rational_approximation
 
-
-    elif method == "bura":
-        parameter = 16      # Degree of the rational approximation (integer, more precise if large)
-        # For coarse scheme
-        # parameter = 3     # (3 solves, error ~ 0.005)
-        rational_approximation = BURA_rational_approximation
-
-    main()
+            main()

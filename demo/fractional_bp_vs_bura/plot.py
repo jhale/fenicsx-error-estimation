@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mpltools import annotation
 
 def marker(x_data, y_datas, position, gap):
-    middle = np.floor(len(x_data)/2.).astype(int)
+    middle = np.floor(len(x_data)/2.).astype(np.int32)
     anchor_1_1 = []
     anchor_2_1 = []
 
@@ -31,23 +31,25 @@ def slopes(xs, ys, method):
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
     print(f"Estimator slope ({method}): {m}")
 
-
-df_bp = pd.read_csv(f"./results_bp.csv")
-df_bura = pd.read_csv(f"./results_bura.csv")
-
-xs_bp = df_bp["dof num"].values
-ys_bp = df_bp["L2 bw"].values
-
-xs_bura = df_bura["dof num"].values
-ys_bura = df_bura["L2 bw"].values
-
 plt.figure()
-slopes(xs_bp, ys_bp, "BP")
-slopes(xs_bura, ys_bura, "BURA")
-plt.loglog(xs_bp, ys_bp, "^--", label="L2 bw (BP)")
-plt.loglog(xs_bura, ys_bura, "^-.", label="L2 bw (BURA)")
-plt.loglog(xs_bp, xs_bp**(-1.), "-", label="slope -1")
+for s in [0.3, 0.5, 0.7]:
+    df_bp = pd.read_csv(f"./results_bp_{str(s)[-1]}.csv")
+    df_bura = pd.read_csv(f"./results_bura_{str(s)[-1]}.csv")
+
+    xs_bp = df_bp["dof num"].values
+    ys_bp = df_bp["L2 bw"].values
+
+    xs_bura = df_bura["dof num"].values
+    ys_bura = df_bura["L2 bw"].values
+
+    slopes(xs_bp, ys_bp, f"BP, s={s}")
+    slopes(xs_bura, ys_bura, f"BURA, s={s}")
+    plt.loglog(xs_bp, ys_bp, "o-", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BP, s={s})")
+    plt.loglog(xs_bura, ys_bura, "^--", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BURA, s={s})")
+
+marker_x, marker_y = marker(xs_bp, [ys_bp], 0.2, 0.1)
+annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
 plt.legend()
 plt.xlabel("dof")
-plt.ylabel("L2 bw")
+plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
 plt.savefig(f"conv.pdf")
