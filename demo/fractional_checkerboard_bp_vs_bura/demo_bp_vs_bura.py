@@ -69,7 +69,7 @@ def BURA_rational_approximation(degree, s):
             c_2s: reaction coefficients of the rational sum
             weights: multiplicative coefficients of the rational sum
             constant: multiplicative constant in front of the sum
-        initial_constant: once the parametric solutions are added initial_constant * f must be added to this sum to obtain the fractional approximation
+            initial_constant: once the parametric solutions are added initial_constant * f must be added to this sum to obtain the fractional approximation
         err: the rational approximation error estimation
     """
 
@@ -82,21 +82,20 @@ def BURA_rational_approximation(degree, s):
     r_brasil = br.brasil(r, domain, (degree-1,degree)) # (degree-1, degree) gives the best result
     pol_brasil, res_brasil = r_brasil.polres()
 
-    c_1s = np.abs(pol_brasil)
+    c_1s = -pol_brasil
     c_2s = np.ones_like(c_1s)
-    weights = res_brasil/c_1s
+    weights = res_brasil/pol_brasil
     constant = 1.
 
     rational_parameters = {"c_1s": c_1s, "c_2s": c_2s,
                         "weights": weights,
-                        "constant": constant}
-
-    initial_constant = np.sum(-res_brasil/c_1s)
+                        "constant": constant,
+                        "initial constant": -np.sum(weights)}
 
     # Rational error estimation
     err = np.max(np.abs(r(xs) - r_brasil(xs)))
 
-    return rational_parameters, initial_constant, err
+    return rational_parameters, err
 
 
 def BP_rational_approximation(kappa, s):
