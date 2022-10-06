@@ -31,7 +31,7 @@ def slopes(xs, ys, method):
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
     print(f"Estimator slope ({method}): {m}")
 
-plt.figure()
+
 for s in [0.3, 0.5, 0.7]:
     df_bp = pd.read_csv(f"./results_bp_{str(s)[-1]}.csv")
     df_bura = pd.read_csv(f"./results_bura_{str(s)[-1]}.csv")
@@ -44,12 +44,14 @@ for s in [0.3, 0.5, 0.7]:
 
     slopes(xs_bp, ys_bp, f"BP, s={s}")
     slopes(xs_bura, ys_bura, f"BURA, s={s}")
-    plt.loglog(xs_bp, ys_bp, "o-", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BP, s={s})")
-    plt.loglog(xs_bura, ys_bura, "^--", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BURA, s={s})")
 
-marker_x, marker_y = marker(xs_bp, [ys_bp], 0.2, 0.1)
-annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
-plt.legend()
-plt.xlabel("dof")
-plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
-plt.savefig(f"conv.pdf")
+    plt.figure()
+    plt.loglog(xs_bp, ys_bp, "o-", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ BP")
+    plt.loglog(xs_bura, ys_bura, "^--", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ BURA")
+
+    marker_x, marker_y = marker(xs_bp, [ys_bp], 0.2, 0.1)
+    annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
+    plt.legend()
+    plt.xlabel("dof")
+    plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
+    plt.savefig(f"conv_{str(s)[-1]}.pdf")

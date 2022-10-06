@@ -128,7 +128,7 @@ def BP_rational_approximation(kappa, s):
     constant = (2. * np.sin(np.pi * s) * kappa) / np.pi
 
     rational_parameters = {"c_1s": c_1s, "c_2s": c_2s, "weights": weights,
-                           "constant": constant}
+                           "constant": constant, "initial constant": 0.}   # There is no initial term in this method so initial_constant must be 0.
     
     # Rational error estimation
     xs = np.linspace(1., 1e8, 10000)
@@ -142,9 +142,7 @@ def BP_rational_approximation(kappa, s):
     
     err = np.max(np.abs(np.power(xs, -s) - ys))
 
-    initial_constant = 0.   # There is no initial term in this method so initial_constant must be 0.
-
-    return rational_parameters, initial_constant, err
+    return rational_parameters, err
 
 
 def parametric_problem(f, V, k, rational_parameters, bcs,
@@ -290,7 +288,7 @@ def main():
         elif method == "bura":
             parameter += 1
 
-        rational_parameters, initial_constant, rational_error = rational_approximation(parameter, s)
+        rational_parameters, rational_error = rational_approximation(parameter, s)
 
     # Results storage
     results = {"dof num": [], "rational parameter": [], "num solves": [], "L2 bw": [], "rational error": []}
@@ -343,7 +341,7 @@ def main():
         # If method == "bp" then this step is useless (intial_constant=0.)
         f_V = Function(V)
         f_V.interpolate(f_e)
-        u_h.vector.array += initial_constant * f_V.vector.array
+        u_h.vector.array += rational_parameters["initial constant"] * f_V.vector.array
 
         # Estimator steering the refinement
         bw_sq_local_estimator = estimators["L2 squared local BW"]
