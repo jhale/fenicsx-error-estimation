@@ -21,41 +21,6 @@ from petsc4py import PETSc
 import pandas as pd
 
 
-def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta=0.3):
-    """
-    Uses Dörfler marking to refine the mesh based on the values of the estimator.
-    Parameters:
-        mesh: the initial mesh on which the estimator has been computed
-        sq_local_estimator: the square root of the local contributions of the estimator
-        global_estimtor: the global estimator
-        theta: the Dörfler marking parameter (the standard value is theta=0.3)
-    Returns:
-        mesh: the refined mesh.
-    """
-    # Dörfler marking
-    eta_global = global_estimator**2
-    cutoff = theta * eta_global
-
-    assert MPI.COMM_WORLD.size == 1
-    sorted_cells = np.argsort(sq_local_estimator.vector.array)[::-1]
-    rolling_sum = 0.
-    for i, e in enumerate(sq_local_estimator.vector.array[sorted_cells]):
-        rolling_sum += e
-        if rolling_sum > cutoff:
-            breakpoint = i
-            break
-
-    refine_cells = sorted_cells[0:breakpoint + 1]
-    indices = np.array(np.sort(refine_cells), dtype=np.int32)
-    edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 1)
-
-    # Refine mesh
-    mesh.topology.create_entities(mesh.topology.dim - 1)
-    mesh = dolfinx.mesh.refine(mesh, edges)
-
-    return mesh
-
-
 def BURA_rational_approximation(degree, s):
     """
     Generates the parameters for the BURA using the BRASIL method from Hofreither 2020.
@@ -194,6 +159,7 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 
     estimators = {"BW fractional solution": None}
 
+    parametric_results = {"parametric index": [], "parametric exact error": []}
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
         print(f'Refinement step {ref_step}: Parametric problem {i}: System solve and error estimation...')
         # Parametric problems solves
@@ -223,6 +189,27 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
         u_param.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                                    mode=PETSc.ScatterMode.FORWARD)
         
+        # Analytical parametric solution
+        def u_param_exact(x):
+            values = 1./(c_2 + c_1 * 2.) * np.sin(x[0]) * np.sin(x[1])
+            return values
+
+        # Exact error
+        element_f = ufl.FiniteElement("CG", mesh.ufl_cell(), k+1)
+        V_f = FunctionSpace(mesh, element_f)
+        u_param_exact_V_f = Function(V_f)
+        u_param_exact_V_f.interpolate(u_param_exact)
+        u_param_V_f = Function(V_f)
+        u_param_V_f.interpolate(u_param)
+        v_e = TestFunction(V_e)
+
+        e_param_f = u_param_exact_V_f - u_param_V_f
+        local_err_2 = assemble_vector(form(inner(inner(e_param_f, e_param_f), v_e) * dx))
+        err_param = np.sqrt(local_err_2.sum())
+
+        parametric_results["parametric index"].append(i)
+        parametric_results["parametric exact error"].append(err_param)
+
         with XDMFFile(mesh.comm, f"output/" + method + f"_{str(s)[-1]}" + "/parametric_solutions/" + f"u_{str(i).zfill(4)}.xdmf", "w") as of:
             of.write_mesh(mesh)
             of.write_function(u_param)
@@ -248,8 +235,12 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
         # Update fractional error solution
         e_h_f.vector.axpy(weight, e_h_param.vector)
 
+
     u_h.vector.scale(constant)
     e_h_f.vector.scale(constant)
+
+    df = pd.DataFrame(parametric_results)
+    df.to_csv(f"output/{method}_{str(s)[-1]}/parametric_results_{str(ref_step)}.csv")
 
     # Computation of the L2 BW estimator
     bw_vector = assemble_vector(form(inner(inner(e_h_f, e_h_f), v_e) * dx))
@@ -265,12 +256,12 @@ def main():
     # Finite element degree
     k = 1
     # Number adaptive refinements
-    num_refinement_steps = 18
+    num_refinement_steps = 7
     # Dorfler marking parameter
     theta = 0.3
 
     # Structured mesh
-    mesh = create_unit_square(MPI.COMM_WORLD, 4, 4)
+    mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
     mesh.geometry.x[:] *= np.pi
 
     # Data
@@ -289,7 +280,7 @@ def main():
         parameter = 1
 
     rational_error = np.Inf
-    while(rational_error > 1e-5):
+    while(rational_error > 1e-8):
         if method == "bp":
             parameter -= 0.01
         elif method == "bura":
@@ -377,8 +368,7 @@ def main():
         local_err_2 = assemble_vector(form(inner(inner(e_f, e_f), v_e) * dx))
         err = np.sqrt(local_err_2.sum())
 
-        mesh = mesh_refinement(mesh, bw_sq_local_estimator, bw_global_estimator,
-                               theta)
+        mesh = dolfinx.mesh.refine(mesh)    # This test case doesn't require adaptive refinement
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["exact error"].append(err)
@@ -396,13 +386,13 @@ if __name__ == "__main__":
     for method in ["bp", "bura"]:
         for s in [0.3, 0.5, 0.7]:
             if method == "bp":
-                parameter = 0.4    # Fineness parameter (in (0., 1.), more precise if close to 0.)
+                # parameter = 0.35    # Fineness parameter (in (0., 1.), more precise if close to 0.)
                 # For coarse scheme
                 # parameter = 2.5   # (3 solves, error ~ 0.06)
                 rational_approximation = BP_rational_approximation
 
             elif method == "bura":
-                parameter = 9      # Degree of the rational approximation (integer, more precise if large)
+                # parameter = 10      # Degree of the rational approximation (integer, more precise if large)
                 # For coarse scheme
                 # parameter = 3     # (3 solves, error ~ 0.005)
                 rational_approximation = BURA_rational_approximation

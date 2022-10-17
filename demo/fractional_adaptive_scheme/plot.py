@@ -48,16 +48,17 @@ xs_bura = np.cumsum(xs_bura)
 xs_bura_nap = np.multiply(df_bura_nap["dof num"].values[:], df_bura_nap["solves num"].values[:])
 xs_bura_nap = np.cumsum(xs_bura_nap)
 
+
 # Total estimator ~ L2 BW + ||f|| * rational_error (for checkerboard ||f|| = 0.5)
 ys_bp_UB = df_bp["L2 bw"].values + 0.5 * df_bp["rational error"]
 ys_bp_nap_UB = df_bp_nap["L2 bw"].values + 0.5 * df_bp_nap["rational error"]
 ys_bura_UB = df_bura["L2 bw"].values + 0.5 * df_bura["rational error"]
 ys_bura_nap_UB = df_bura_nap["L2 bw"].values + 0.5 * df_bp_nap["rational error"]
 
-ys_bp_LB = np.maximum(df_bp["L2 bw"].values, 0.5 * df_bp["rational error"])
-ys_bp_nap_LB = np.maximum(df_bp_nap["L2 bw"].values, 0.5 * df_bp_nap["rational error"])
-ys_bura_LB = np.maximum(df_bura["L2 bw"].values, 0.5 * df_bura["rational error"])
-ys_bura_nap_LB = np.maximum(df_bura_nap["L2 bw"].values, 0.5 * df_bp_nap["rational error"])
+ys_bp_LB = np.abs(df_bp["L2 bw"].values - 0.5 * df_bp["rational error"])
+ys_bp_nap_LB = np.abs(df_bp_nap["L2 bw"].values - 0.5 * df_bp_nap["rational error"])
+ys_bura_LB = np.abs(df_bura["L2 bw"].values - 0.5 * df_bura["rational error"])
+ys_bura_nap_LB = np.abs(df_bura_nap["L2 bw"].values - 0.5 * df_bp_nap["rational error"])
 
 plt.figure()
 

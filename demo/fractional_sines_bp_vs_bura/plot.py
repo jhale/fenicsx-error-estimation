@@ -32,47 +32,38 @@ def slopes(xs, ys, method):
     print(f"Estimator slope ({method}): {m}")
 
 for s in [0.3, 0.5, 0.7]:
-    df_bp = pd.read_csv(f"./results_bp_{str(s)[-1]}.csv")
-    df_bura = pd.read_csv(f"./results_bura_{str(s)[-1]}.csv")
+    for method in ["bp", "bura"]:
+        df = pd.read_csv(f"./results_{method}_{str(s)[-1]}.csv")
 
-    xs_bp = df_bp["dof num"].values
-    ys_bp = df_bp["L2 bw"].values
-    err_bp = df_bp["exact error"].values
+        xs = df["dof num"].values
+        ys = df["L2 bw"].values
+        err = df["exact error"].values
 
-    xs_bura = df_bura["dof num"].values
-    ys_bura = df_bura["L2 bw"].values
-    err_bura = df_bura["exact error"].values
+        slopes(xs, ys, f"{method}, s={s}")
 
-    # Total estimator ~ L2 BW + ||f|| * rational_error (for checkerboard ||f|| = 0.5)
-    '''
-    ys_bp_UB = df_bp["L2 bw"].values + 2. * df_bp["rational error"]
-    ys_bura_UB = df_bura["L2 bw"].values + 2. * df_bura["rational error"]
+        plt.figure()
+        plt.loglog(xs, ys, "^-", color="#3B75AF", linewidth=2.5, label=fr"$\eta^{{\mathrm{{bw}}}}_N$ ({method}, s={s})")
+        plt.loglog(xs, err, "^--", color="#B3C6E5", linewidth=2.5, label=fr"$||u_{{Q^s_N, 1}} - u||_{{L^2(\Omega)}}$ ({method}, s={s})")
 
-    ys_bp_LB = np.maximum(df_bp["L2 bw"].values, 2. * df_bp["rational error"])
-    ys_bura_LB = np.maximum(df_bura["L2 bw"].values, 2. * df_bura["rational error"])
-    '''
+        marker_x, marker_y = marker(xs, [ys, err], 0.2, 0.1)
+        annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
+        plt.legend()
+        plt.xlabel("dof")
+        plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
+        plt.savefig(f"conv_" + method + f"_{str(s)[-1]}.pdf")
 
-    slopes(xs_bp, ys_bp, f"BP, s={s}")
-    slopes(xs_bura, ys_bura, f"BURA, s={s}")
+        df_parametric = pd.read_csv(f"./output/{method}_{str(s)[-1]}/parametric_results_5.csv")
 
-    plt.figure()
-    plt.loglog(xs_bp, ys_bp, "o-", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BP, s={s})")
-    plt.loglog(xs_bp, err_bp, "o-", label=fr"$||u_{{Q^s_N, 1}} - u||_{{L^2(\Omega)}}$ (BP, s={s})")
+        xs_parametric = df_parametric["parametric index"].values
+        ys_parametric = df_parametric["parametric exact error"].values
 
-    plt.loglog(xs_bura, ys_bura, "^--", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ (BURA, s={s})")
-    plt.loglog(xs_bura, err_bura, "^--", label=fr"$||u_{{Q^s_N, 1}} - u||_{{L^2(\Omega)}}$ (BURA, s={s})")
-
-    '''
-    plt.loglog(xs_bp, ys_bp_LB, "s-.", label=f"Total error LB")
-    plt.loglog(xs_bp, ys_bp_UB, "s-.", label=f"Total error UB")
-
-    plt.loglog(xs_bp, ys_bura_LB, "s-.", label=f"Total error LB")
-    plt.loglog(xs_bp, ys_bura_UB, "s-.", label=f"Total error UB")
-    '''
-
-    marker_x, marker_y = marker(xs_bp, [ys_bp, err_bp], 0.2, 0.1)
-    annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
-    plt.legend()
-    plt.xlabel("dof")
-    plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
-    plt.savefig(f"conv_" + f"{str(s)[-1]}.pdf")
+        plt.figure()
+        plt.semilogy(xs_parametric, ys_parametric, color="#3B75AF", linewidth=2.5)
+        plt.xlabel(f"Parametric index $l$")
+        if method == "bura":
+            plt.xticks(xs_parametric)
+        else:
+            plt.xticks(xs_parametric[::17])
+        
+        plt.ylabel(r"$||u_l - u_{l,1}||_{L^2}$")
+        plt.savefig(f"parametric_errors_" + method + f"_{str(s)[-1]}.pdf")

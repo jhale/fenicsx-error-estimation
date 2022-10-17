@@ -79,7 +79,7 @@ def BURA_rational_approximation(degree, s):
     domain = [1e-8, 1.] # The upper bound is lambda_1^{-1} where lambda_1 is the lowest eigenvalue, in this case lambda_1 = 1
     xs = np.linspace(domain[0], 1., 10000)
 
-    r_brasil = br.brasil(r, domain, (degree-1,degree)) # (degree-1, degree) gives the best result
+    r_brasil = br.brasil(r, domain, degree)
     pol_brasil, res_brasil = r_brasil.polres()
 
     c_1s = -pol_brasil
@@ -194,7 +194,8 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
     estimators = {"BW fractional solution": None}
 
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
-        print(f'Refinement step {ref_step}: Parametric problem {i}: System solve and error estimation...')
+        print(f"Method: {method}, Adaptive: {adaptive}, s: {s}, Ref step: {ref_step}, Param solve: {i}")
+
         # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
@@ -261,13 +262,23 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 def main():
     # Finite element degree
     k = 1
-    # Number adaptive refinements
-    num_refinement_steps = 18
+
+    # FE error tolerance
+    fe_tol = 1.e-5
+
+    # Rational error tolerance
+    ra_tol = 1.e-7
+
     # Dorfler marking parameter
     theta = 0.3
 
     # Structured mesh
-    mesh = create_unit_square(MPI.COMM_WORLD, 32, 32)
+    mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
+
+    if adaptive:
+        output_dir = "output/" + method + "_adaptive" + f"_{str(s)[-1]}/"
+    else:
+        output_dir = "output/" + method + f"_{str(s)[-1]}/"
 
     # Data
     def f_e(x):
@@ -282,7 +293,7 @@ def main():
         parameter = 1
 
     rational_error = np.Inf
-    while(rational_error > 1e-5):
+    while(rational_error > ra_tol):
         if method == "bp":
             parameter -= 0.01
         elif method == "bura":
@@ -292,7 +303,9 @@ def main():
 
     # Results storage
     results = {"dof num": [], "rational parameter": [], "num solves": [], "L2 bw": [], "rational error": []}
-    for ref_step in range(num_refinement_steps):
+    bw_global_estimator = np.Inf
+    ref_step = 0
+    while bw_global_estimator > fe_tol:
         dx = Measure("dx", domain=mesh)
 
         # Finite element spaces and functions
@@ -307,7 +320,7 @@ def main():
         f = Function(V_e)
         f.interpolate(f_e)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"/f_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"f_{str(ref_step).zfill(3)}.xdmf",
                 "w") as of:
             of.write_mesh(mesh)
             of.write_function(f)
@@ -347,18 +360,20 @@ def main():
         bw_sq_local_estimator = estimators["L2 squared local BW"]
         bw_global_estimator = estimators["L2 global BW"]
 
-        with XDMFFile(mesh.comm, "output/" + method + f"/u_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"u_{str(ref_step).zfill(3)}.xdmf",
                 "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_h)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"/l2_bw_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"l2_bw_{str(ref_step).zfill(3)}.xdmf",
                 "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(bw_sq_local_estimator)
 
-        mesh = mesh_refinement(mesh, bw_sq_local_estimator, bw_global_estimator,
-                               theta)
+        if adaptive:
+            mesh = mesh_refinement(mesh, bw_sq_local_estimator,  bw_global_estimator, theta)
+        else:
+            mesh = dolfinx.mesh.refine(mesh)
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
@@ -367,23 +382,28 @@ def main():
         results["num solves"].append(len(rational_parameters["c_1s"]))
 
         df = pd.DataFrame(results)
-        df.to_csv(f"results_{method}_{str(s)[-1]}.csv")
+        if adaptive:
+            df.to_csv(f"results_{method}_{str(s)[-1]}_adaptive.csv")
+        else:
+            df.to_csv(f"results_{method}_{str(s)[-1]}.csv")
         print(df)
 
+        ref_step += 1
 
 if __name__ == "__main__":
-    for method in ["bp", "bura"]:
-        for s in [0.3, 0.5, 0.7]:
-            if method == "bp":
-                parameter = 0.4    # Fineness parameter (in (0., 1.), more precise if close to 0.)
-                # For coarse scheme
-                # parameter = 2.5   # (3 solves, error ~ 0.06)
-                rational_approximation = BP_rational_approximation
+    for adaptive in [True, False]:
+        for method in ["bp", "bura"]:
+            for s in [0.3, 0.5]:
+                if method == "bp":
+                    parameter = 0.4    # Fineness parameter (in (0., 1.), more precise if close to 0.)
+                    # For coarse scheme
+                    # parameter = 2.5   # (3 solves, error ~ 0.06)
+                    rational_approximation = BP_rational_approximation
 
-            elif method == "bura":
-                parameter = 9      # Degree of the rational approximation (integer, more precise if large)
-                # For coarse scheme
-                # parameter = 3     # (3 solves, error ~ 0.005)
-                rational_approximation = BURA_rational_approximation
+                elif method == "bura":
+                    parameter = 9      # Degree of the rational approximation (integer, more precise if large)
+                    # For coarse scheme
+                    # parameter = 3     # (3 solves, error ~ 0.005)
+                    rational_approximation = BURA_rational_approximation
 
-            main()
+                main()
