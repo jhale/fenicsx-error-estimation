@@ -1,0 +1,27 @@
+WARNING:py.warnings:/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py:325: FutureWarning: elementwise comparison failed; returning scalar instead, but in the future will perform elementwise comparison
+  if arg in ("+", "-"):
+
+Fatal Python error: _Py_CheckRecursiveCall: Cannot recover from stack overflow.
+Python runtime state: initialized
+
+Current thread 0x0000004000b9d740 (most recent call first):
+  File "/usr/local/lib/python3.9/dist-packages/ufl/corealg/multifunction.py", line 56 in __init__
+  File "/usr/local/lib/python3.9/dist-packages/ufl/algorithms/apply_algebra_lowering.py", line 30 in __init__
+  File "/usr/local/lib/python3.9/dist-packages/ufl/algorithms/apply_algebra_lowering.py", line 175 in apply_algebra_lowering
+  File "/usr/local/lib/python3.9/dist-packages/ufl/algorithms/ad.py", line 31 in expand_derivatives
+  File "/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py", line 314 in _eval
+  File "/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py", line 330 in _call
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/expr.py", line 313 in _ufl_evaluate_scalar_
+  [...]
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/expr.py", line 313 in _ufl_evaluate_scalar_
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/expr.py", line 318 in __float__
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/terminal.py", line 50 in evaluate
+  File "/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py", line 320 in _eval
+  File "/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py", line 330 in _call
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/expr.py", line 313 in _ufl_evaluate_scalar_
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/expr.py", line 318 in __float__
+  File "/usr/local/lib/python3.9/dist-packages/ufl/core/terminal.py", line 50 in evaluate
+  File "/usr/local/lib/python3.9/dist-packages/ufl/exproperators.py", line 320 in _eval
+  ...
+qemu: uncaught target signal 6 (Aborted) - core dumped
+Aborted
