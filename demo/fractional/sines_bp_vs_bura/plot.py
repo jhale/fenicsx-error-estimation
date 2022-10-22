@@ -29,17 +29,22 @@ def slopes(xs, ys, method):
     A = np.vstack([np.log(xs), np.ones_like(xs)]).T
 
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
-    print(f"Estimator slope ({method}): {m}")
+    return m
 
+slopes_results = {"s": [], "method": [], "slope": []}
 for s in [0.3, 0.5, 0.7]:
     for method in ["bp", "bura"]:
         df = pd.read_csv(f"./results_{method}_{str(s)[-1]}.csv")
 
         xs = df["dof num"].values
         ys = df["L2 bw"].values
-        err = df["exact error"].values
+        err = df["total error"].values
 
-        slopes(xs, ys, f"{method}, s={s}")
+        m = slopes(xs, ys, f"{method}, s={s}")
+
+        slopes_results["s"].append(s)
+        slopes_results["method"].append(method)
+        slopes_results["slope"].append(m)
 
         plt.figure()
         plt.loglog(xs, ys, "^-", color="#3B75AF", linewidth=2.5, label=fr"$\eta^{{\mathrm{{bw}}}}_N$ ({method}, s={s})")
@@ -53,13 +58,17 @@ for s in [0.3, 0.5, 0.7]:
         plt.savefig(f"conv_" + method + f"_{str(s)[-1]}.pdf")
 
         df_parametric = pd.read_csv(f"./output/{method}_{str(s)[-1]}/parametric_results_5.csv")
+        df_rational_parameters = pd.read_csv(f"./output/{method}_{str(s)[-1]}/rational_parameters.csv")
 
         xs_parametric = df_parametric["parametric index"].values
+        #xs_parametric = df_rational_parameters["c_1s"].values
         ys_parametric = df_parametric["parametric exact error"].values
 
         plt.figure()
         plt.semilogy(xs_parametric, ys_parametric, color="#3B75AF", linewidth=2.5)
+        #plt.loglog(xs_parametric, ys_parametric, color="#3B75AF", linewidth=2.5)
         plt.xlabel(f"Parametric index $l$")
+        #plt.xlabel(f"Parametric coefficient $b_l$")
         if method == "bura":
             plt.xticks(xs_parametric)
         else:
@@ -67,3 +76,7 @@ for s in [0.3, 0.5, 0.7]:
         
         plt.ylabel(r"$||u_l - u_{l,1}||_{L^2}$")
         plt.savefig(f"parametric_errors_" + method + f"_{str(s)[-1]}.pdf")
+
+df = pd.DataFrame(slopes_results)
+print(df)
+df.to_csv("slopes_results.csv")

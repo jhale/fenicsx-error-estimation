@@ -26,18 +26,8 @@ from FE_utils import mesh_refinement, parametric_problem
 
 
 def main():
-    # Finite element degree
-    k = 1
-
-    # Rational approximation tolerance
-    r_tol = 1.e-2
-
-    # Number adaptive refinements
-    num_refinement_steps = 7
-
-    # Dorfler marking parameter
-    theta = 0.3
-
+    output_dir = "output/" + method + f"_{str(s)[-1]}/"
+    
     # Structured mesh
     mesh = create_unit_square(MPI.COMM_WORLD, 4, 4)
     mesh.geometry.x[:] *= np.pi
@@ -66,9 +56,14 @@ def main():
 
         rational_parameters, rational_tol = rational_approximation(parameter, s)
 
+    df_rational_parameters = pd.DataFrame(rational_parameters)
+    df_rational_parameters.to_csv(output_dir + "rational_parameters.csv")
     # Results storage
     results = {"dof num": [], "rational parameter": [], "num solves": [], "rational error": [], "FE error": [], "total error": [], "sqrt(FE^2 + rat errors^2)": [], "L2 bw": [], "rational error": []}
-    for ref_step in range(num_refinement_steps):
+
+    ref_step = 0
+    bw_global_estimator = np.Inf
+    while bw_global_estimator > FE_tol:
         dx = Measure("dx", domain=mesh)
 
         # Finite element spaces and functions
@@ -83,7 +78,7 @@ def main():
         f_V_f = Function(V_f)
         f_V_f.interpolate(f)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"_{str(s)[-1]}" + f"/f_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"/f_{str(ref_step).zfill(3)}.xdmf",
                 "w") as of:
             of.write_mesh(mesh)
             of.write_function(f_V_f)
@@ -112,7 +107,9 @@ def main():
         u_h, estimators = parametric_problem(f_V_f, V, k, rational_parameters, bcs,
                                              boundary_entities_sorted, a_form,
                                              L_form, cst_1, cst_2,
-                                             ref_step=ref_step)
+                                             ref_step=ref_step,
+                                             output_dir=output_dir,
+                                             sines_test_case=True)
 
         # Compute the L2 projection of f onto V (only necessary for BURA)
         if method == "bura":
@@ -170,7 +167,7 @@ def main():
         u_Q_V_f = Function(V_f)
         u_Q_V_f.interpolate(u_Q)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"_{str(s)[-1]}" + f"/u_Q_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
+        with XDMFFile(mesh.comm, output_dir + f"/u_Q_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_Q_V_f)
 
@@ -196,22 +193,23 @@ def main():
         bw_sq_local_estimator = estimators["L2 squared local BW"]
         bw_global_estimator = estimators["L2 global BW"]
 
-        with XDMFFile(mesh.comm, "output/" + method + f"_{str(s)[-1]}" + f"/u_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"/u_{str(ref_step).zfill(3)}.xdmf",
                 "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_h)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"_{str(s)[-1]}" + f"/u_exact_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"/u_exact_{str(ref_step).zfill(3)}.xdmf",
         "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(u_V_f)
 
-        with XDMFFile(mesh.comm, "output/" + method + f"_{str(s)[-1]}" + f"/l2_bw_{str(ref_step).zfill(3)}.xdmf",
+        with XDMFFile(mesh.comm, output_dir + f"/l2_bw_{str(ref_step).zfill(3)}.xdmf",
                 "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(bw_sq_local_estimator)
 
         mesh = dolfinx.mesh.refine(mesh)    # This test case doesn't require adaptive refinement
+        ref_step += 1
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["total error"].append(total_err)
@@ -228,8 +226,22 @@ def main():
 
 
 if __name__ == "__main__":
-    for method in ["bura"]:
-        for s in [0.3]:
+    # Finite element degree
+    k = 1
+
+    # Rational approximation tolerance
+    r_tol = 1.e-8
+
+    # Number adaptive refinements
+    FE_tol = 1.e-3
+
+    # Dorfler marking parameter
+    theta = 0.3
+
+    sines_test_case=True
+
+    for method in ["bp", "bura"]:
+        for s in [0.3, 0.5, 0.7]:
             if method == "bp":
                 # parameter = 0.35    # Fineness parameter (in (0., 1.), more precise if close to 0.)
                 # For coarse scheme

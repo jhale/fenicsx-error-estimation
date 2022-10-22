@@ -53,7 +53,7 @@ def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta=0.3):
 
 def parametric_problem(f, V, k, rational_parameters, bcs,
                        boundary_entities_sorted, a_form, L_form, cst_1, cst_2,
-                       ref_step=0, bw_global_estimator=np.Inf):
+                       ref_step=0, output_dir=None, sines_test_case=False):
     mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
 
@@ -99,9 +99,9 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 
     estimators = {"BW fractional solution": None}
 
+    parametric_results = {"parametric index": [], "parametric exact error": []}
     for i, (c_1, c_2, weight) in enumerate(zip(c_1s, c_2s, weights)):
-        print("\t Param solve:", i)
-
+        print(f'Refinement step {ref_step}: Parametric problem {i}: System solve and error estimation...')
         # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
@@ -128,6 +128,35 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
         solver.solve(b, u_param.vector)
         u_param.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                                    mode=PETSc.ScatterMode.FORWARD)
+        
+        if sines_test_case:
+            # Analytical parametric solution
+            def u_param_exact(x):
+                values = 1./(c_2 + c_1 * 2.) * np.sin(x[0]) * np.sin(x[1])
+                return values
+
+            # Exact error
+            element_f = ufl.FiniteElement("CG", mesh.ufl_cell(), k+1)
+            V_f = FunctionSpace(mesh, element_f)
+            u_param_exact_V_f = Function(V_f)
+            u_param_exact_V_f.interpolate(u_param_exact)
+            u_param_V_f = Function(V_f)
+            u_param_V_f.interpolate(u_param)
+            v_e = TestFunction(V_e)
+
+            e_param_f = u_param_exact_V_f - u_param_V_f
+            local_err_2 = assemble_vector(form(inner(inner(e_param_f, e_param_f), v_e) * dx))
+            err_param = np.sqrt(local_err_2.sum())
+
+            parametric_results["parametric index"].append(i)
+            parametric_results["parametric exact error"].append(err_param)
+                
+            df = pd.DataFrame(parametric_results)
+            df.to_csv(output_dir + f"parametric_results_{str(ref_step)}.csv")
+
+            with XDMFFile(mesh.comm, output_dir + "/parametric_solutions/" + f"u_{str(i).zfill(4)}.xdmf", "w") as of:
+                of.write_mesh(mesh)
+                of.write_function(u_param)
 
         # Update fractional solution
         u_h.vector.axpy(weight, u_param.vector)
@@ -158,7 +187,6 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
     bw = Function(V_e)
     bw.vector.setArray(bw_vector)
 
-    global_bw = np.sqrt(bw.vector.sum())
     estimators["L2 squared local BW"] = bw
-    estimators["L2 global BW"] = global_bw
+    estimators["L2 global BW"] = np.sqrt(bw.vector.sum())
     return u_h, estimators
