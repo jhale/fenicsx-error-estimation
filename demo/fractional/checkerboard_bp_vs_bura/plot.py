@@ -25,33 +25,107 @@ def marker(x_data, y_datas, position, gap):
         * (anchor_1[0]/anchor_2[0])**gap
     return marker_x, marker_y
 
-def slopes(xs, ys, method):
+def slopes(xs, ys):
     A = np.vstack([np.log(xs), np.ones_like(xs)]).T
 
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
-    print(f"Estimator slope ({method}): {m}")
+    return m
 
-
-for s in [0.3, 0.5, 0.7]:
-    df_bp = pd.read_csv(f"./results_bp_{str(s)[-1]}.csv")
-    df_bura = pd.read_csv(f"./results_bura_{str(s)[-1]}.csv")
-
-    xs_bp = df_bp["dof num"].values
-    ys_bp = df_bp["L2 bw"].values
-
-    xs_bura = df_bura["dof num"].values
-    ys_bura = df_bura["L2 bw"].values
-
-    slopes(xs_bp, ys_bp, f"BP, s={s}")
-    slopes(xs_bura, ys_bura, f"BURA, s={s}")
-
+slopes_results = {"method": [], "s": [], "FE adaptive": [], "rational adaptive": [], "slope": []}
+for method in ["bp", "bura"]:
     plt.figure()
-    plt.loglog(xs_bp, ys_bp, "o-", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ BP")
-    plt.loglog(xs_bura, ys_bura, "^--", label=fr"$\eta^{{\mathrm{{bw}}}}_N$ BURA")
+    plt.title("2D Checkerboard " + f"{method}")
+    for s in [0.3, 0.5, 0.7]:
+        df = pd.read_csv(f"./results_{method}_{str(s)[-1]}.csv")
+        df_adaptive = pd.read_csv(f"./results_{method}_{str(s)[-1]}_FE_adaptive.csv")
+        df_FE_ra_adaptive = pd.read_csv(f"./results_{method}_{str(s)[-1]}_FE_adaptive_rational_adaptive.csv")
 
-    marker_x, marker_y = marker(xs_bp, [ys_bp], 0.2, 0.1)
-    annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
+        xs = df["dof num"].values
+        ys = df["L2 bw"].values
+        xs_adaptive = df_adaptive["dof num"].values
+        ys_adaptive = df_adaptive["total estimator"].values
+        xs_FE_ra_adaptive = df_FE_ra_adaptive["dof num"].values
+        ys_FE_ra_adaptive = df_FE_ra_adaptive["total estimator"].values
+        slope = slopes(xs, ys)
+        slope_adaptive = slopes(xs_adaptive, ys_adaptive)
+        slope_FE_ra_adaptive = slopes(xs_FE_ra_adaptive, ys_FE_ra_adaptive)
+
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(False)
+        slopes_results["rational adaptive"].append(False)
+        slopes_results["slope"].append(slope)
+    
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(True)
+        slopes_results["rational adaptive"].append(False)
+        slopes_results["slope"].append(slope_adaptive)
+
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(True)
+        slopes_results["rational adaptive"].append(True)
+        slopes_results["slope"].append(slope_FE_ra_adaptive)
+
+        plt.loglog(xs, ys, "o-", label=f"s={s}")
+        plt.loglog(xs_adaptive, ys_adaptive, "^--", label=f"s={s} (FE adaptive)")
+        plt.loglog(xs_FE_ra_adaptive, ys_FE_ra_adaptive, "^--", label=f"s={s} (FE adapt., ra adapt.)")
+
+        marker_x, marker_y = marker(xs_FE_ra_adaptive, [ys_FE_ra_adaptive], 0.2, 0.1)
+        annotation.slope_marker((marker_x, marker_y), (-2, 2), invert=True)
     plt.legend()
     plt.xlabel("dof")
     plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
-    plt.savefig(f"conv_{str(s)[-1]}.pdf")
+    plt.savefig(f"conv_{method}.pdf")
+
+df = pd.DataFrame(slopes_results)
+df.to_csv("./slopes_results.csv")
+print(df)
+
+for method in ["bp", "bura"]:
+    for s in [0.3, 0.5, 0.7]:
+        plt.figure()
+        plt.title(method + f" s={str(s)}")
+    
+        df = pd.read_csv(f"./results_{method}_{str(s)[-1]}.csv")
+        df_adaptive = pd.read_csv(f"./results_{method}_{str(s)[-1]}_FE_adaptive.csv")
+        df_FE_ra_adaptive = pd.read_csv(f"./results_{method}_{str(s)[-1]}_FE_adaptive_rational_adaptive.csv")
+
+        xs = df["num solves"].values * df["dof num"].values
+        ys = df["L2 bw"].values
+        xs_adaptive = df_adaptive["num solves"].values * df_adaptive["dof num"].values
+        ys_adaptive = df_adaptive["total estimator"].values
+        xs_FE_ra_adaptive = df_FE_ra_adaptive["num solves"].values * df_FE_ra_adaptive["dof num"].values
+        ys_FE_ra_adaptive = df_FE_ra_adaptive["total estimator"].values
+
+        slope = slopes(xs, ys)
+        slope_adaptive = slopes(xs_adaptive, ys_adaptive)
+        slope_FE_ra_adaptive = slopes(xs_FE_ra_adaptive, ys_FE_ra_adaptive)
+
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(False)
+        slopes_results["rational adaptive"].append(False)
+        slopes_results["slope"].append(slope)
+    
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(True)
+        slopes_results["rational adaptive"].append(False)
+        slopes_results["slope"].append(slope_adaptive)
+
+        slopes_results["method"].append(method)
+        slopes_results["s"].append(s)
+        slopes_results["FE adaptive"].append(True)
+        slopes_results["rational adaptive"].append(True)
+        slopes_results["slope"].append(slope_FE_ra_adaptive)
+
+        plt.loglog(xs, ys, "o-", label=f"s={s}")
+        plt.loglog(xs_adaptive, ys_adaptive, "^--", label=f"s={s} (FE adaptive)")
+        plt.loglog(xs_FE_ra_adaptive, ys_FE_ra_adaptive, "^--", label=f"s={s} (FE adapt., ra adapt.)")
+
+        plt.legend()
+        plt.xlabel("total dof")
+        plt.ylabel(r"$\eta^{\mathrm{bw}}_N$")
+        plt.savefig(f"cumulative_conv_{method}_{str(s)[-1]}.pdf")
