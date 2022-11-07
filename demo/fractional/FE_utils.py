@@ -3,7 +3,7 @@ import numpy as np
 import dolfinx
 import ufl
 from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
-                         dirichletbc, form, locate_dofs_topological, set_bc)
+                         dirichletbc, form, locate_dofs_topological, locate_dofs_geometrical, set_bc)
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import (CellType, compute_incident_entities,
@@ -93,6 +93,7 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
     c_1s = rational_parameters["c_1s"]
     c_2s = rational_parameters["c_2s"]
     constant = rational_parameters["constant"]
+    initial_constant = rational_parameters["initial constant"]
 
     e_h = Coefficient(V_f)
     weights = rational_parameters["weights"]
@@ -136,11 +137,11 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
                 return values
 
             # Exact error
-            element_f = ufl.FiniteElement("CG", mesh.ufl_cell(), k+1)
-            V_f = FunctionSpace(mesh, element_f)
-            u_param_exact_V_f = Function(V_f)
+            element_f = ufl.FiniteElement("DG", mesh.ufl_cell(), k+1)
+            V_f_CG = FunctionSpace(mesh, element_f)
+            u_param_exact_V_f = Function(V_f_CG)
             u_param_exact_V_f.interpolate(u_param_exact)
-            u_param_V_f = Function(V_f)
+            u_param_V_f = Function(V_f_CG)
             u_param_V_f.interpolate(u_param)
             v_e = TestFunction(V_e)
 
@@ -181,6 +182,82 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
 
     u_h.vector.scale(constant)
     e_h_f.vector.scale(constant)
+
+    # Compute the L2 projection of f onto V (only necessary for BURA)
+    if rational_parameters["initial constant"] > 0.:
+        u0 = Function(V)
+        u0.vector.set(0.)
+        facets = locate_entities_boundary(
+                mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+        dofs = locate_dofs_topological(V, 1, facets)
+        bcs = [dirichletbc(u0, dofs)]
+
+        u = TrialFunction(V)
+        v = TestFunction(V)
+        f_l2_V = Function(V)
+        a_V = form(inner(u, v) * dx)
+        A_V = assemble_matrix(a_V)
+        A_V.assemble()
+        L_V = form(inner(f, v) * dx)
+        b_V = assemble_vector(L_V)
+
+        set_bc(b_V, bcs)
+
+        # Linear system solve
+        options = PETSc.Options()
+        options["ksp_type"] = "cg"
+        options["pc_type"] = "hypre"
+        options["ksp_rtol"] = 1e-7
+        options["pc_hypre_type"] = "boomeramg"
+
+        solver = PETSc.KSP().create(MPI.COMM_WORLD)
+        solver.setOperators(A_V)
+        solver.setFromOptions()
+        solver.solve(b_V, f_l2_V.vector)
+
+        u_h.vector.array += rational_parameters["initial constant"] * f_l2_V.vector.array
+
+        u0_f = Function(V_f)
+        u0_f.vector.set(0.)
+        facets = locate_entities_boundary(
+                mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
+
+        dof_locate = lambda x: np.logical_or.reduce((np.isclose(x[0], 0.0),
+                                                     np.isclose(x[0], np.pi),
+                                                     np.isclose(x[1], 0.0),
+                                                     np.isclose(x[1], np.pi)))
+        dofs = locate_dofs_geometrical(V_f, dof_locate)
+        print(dofs)
+        # dofs = locate_dofs_topological(V_f, 1, facets)
+        bcs = [dirichletbc(u0_f, dofs)]
+
+        u_f = TrialFunction(V_f)
+        v_f = TestFunction(V_f)
+        f_l2_V_f = Function(V_f)
+        a_V_f = form(inner(u_f, v_f) * dx)
+        A_V_f = assemble_matrix(a_V_f)
+        A_V_f.assemble()
+        L_V_f = form(inner(f, v_f) * dx)
+        b_V_f = assemble_vector(L_V_f)
+
+        set_bc(b_V_f, bcs)
+
+        # Linear system solve
+        options = PETSc.Options()
+        options["ksp_type"] = "cg"
+        options["pc_type"] = "hypre"
+        options["ksp_rtol"] = 1e-7
+        options["pc_hypre_type"] = "boomeramg"
+
+        solver = PETSc.KSP().create(MPI.COMM_WORLD)
+        solver.setOperators(A_V_f)
+        solver.setFromOptions()
+        solver.solve(b_V_f, f_l2_V_f.vector)
+
+        f_V_V_f = Function(V_f)
+        f_V_V_f.interpolate(f_l2_V)
+
+        e_h_f.vector.array += rational_parameters["initial constant"] * (f_V_V_f.vector.array - f_l2_V_f.vector.array)
 
     # Computation of the L2 BW estimator
     bw_vector = assemble_vector(form(inner(inner(e_h_f, e_h_f), v_e) * dx))

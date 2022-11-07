@@ -28,7 +28,7 @@ from rational_schemes import BP_rational_approximation, BURA_rational_approximat
 from FE_utils import mesh_refinement, parametric_problem
 
 
-def main(k, fe_tol, ra_tol, theta, mesh, f):
+def main(k, tol, ra_tol, theta, mesh, f, parameter):
     if FE_adaptive:
         if rational_adaptive:
             output_dir = "output/" + method + "_FE_adaptive" + "_rational_adaptive" + f"_{str(s)[-1]}/"
@@ -42,11 +42,6 @@ def main(k, fe_tol, ra_tol, theta, mesh, f):
     else:
         shutil.rmtree(output_dir)
         os.makedirs(output_dir)
-
-    if method == "bp":
-        parameter = 1.
-    elif method == "bura":
-        parameter = 1
 
     if not rational_adaptive:
         rational_error = np.Inf
@@ -62,9 +57,10 @@ def main(k, fe_tol, ra_tol, theta, mesh, f):
 
     # Results storage
     results = {"dof num": [], "rational parameter": [], "num solves": [],  "L2 bw": [], "rational estimator": [], "total estimator": []}
-    bw_global_estimator = np.Inf
+    total_num_solves = 0
+    total_estimator = np.Inf
     ref_step = 0
-    while bw_global_estimator > fe_tol:
+    while total_estimator > tol:
         dx = Measure("dx", domain=mesh)
 
         # Finite element spaces and functions
@@ -111,52 +107,18 @@ def main(k, fe_tol, ra_tol, theta, mesh, f):
                                              L_form, cst_1, cst_2,
                                              ref_step=ref_step, output_dir=output_dir)
 
-        # Compute the L2 projection of f onto V (only necessary for BURA)
-        if method == "bura":
-            u0 = Function(V)
-            u0.vector.set(0.)
-            facets = locate_entities_boundary(
-                    mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
-            dofs = locate_dofs_topological(V, 1, facets)
-            bcs = [dirichletbc(u0, dofs)]
-
-            u = TrialFunction(V)
-            v = TestFunction(V)
-            f_l2_V = Function(V)
-            a_V = form(inner(u, v) * dx)
-            A_V = assemble_matrix(a_V)
-            A_V.assemble()
-            L_V = form(inner(f_e, v) * dx)
-            b_V = assemble_vector(L_V)
-
-            set_bc(b_V, bcs)
-
-            # Linear system solve
-            options = PETSc.Options()
-            options["ksp_type"] = "cg"
-            options["pc_type"] = "hypre"
-            options["ksp_rtol"] = 1e-7
-            options["pc_hypre_type"] = "boomeramg"
-
-            solver = PETSc.KSP().create(MPI.COMM_WORLD)
-            solver.setOperators(A_V)
-            solver.setFromOptions()
-            solver.solve(b_V, f_l2_V.vector)
-
-            u_h.vector.array += rational_parameters["initial constant"] * f_l2_V.vector.array
-
         # FE estimator
         bw_sq_local_estimator = estimators["L2 squared local BW"]
         bw_global_estimator = estimators["L2 global BW"]
 
         # Rational estimator
-        rational_estimator = rational_error * 0.5 # ||f||_{L2} = 0.5 in this case
+        rational_estimator = rational_error # ||f||_{L2} = 1. in this case
 
         df_rational_parameters = pd.DataFrame(rational_parameters)
         df_rational_parameters.to_csv(output_dir + f"rational_parameters_{ref_step}.csv")
 
         # Total estimator
-        total_estimator = np.sqrt(bw_global_estimator**2 + rational_estimator**2)
+        total_estimator = bw_global_estimator + rational_estimator
 
         with XDMFFile(mesh.comm, output_dir + f"u_{str(ref_step).zfill(3)}.xdmf",
                 "w") as fo:
@@ -170,30 +132,32 @@ def main(k, fe_tol, ra_tol, theta, mesh, f):
 
         if FE_adaptive:
             mesh = mesh_refinement(mesh, bw_sq_local_estimator,  bw_global_estimator, theta)
-
-            if rational_adaptive:
-                # Rational scheme refinement
-                if ref_step <= 1:
-                    coef = 0.5
-                else:
-                    coef = results["L2 bw"][-1]/results["L2 bw"][-2]
-                    #coef = np.mean([results["L2 bw"][-i]/results["L2 bw"][-i-1] for i in np.arange(1,len(results["L2 bw"]))])
-
-                #coef = 1.
-                if rational_adaptive:
-                    rational_error = np.Inf
-                    if method == "bura":
-                        parameter = 1       # Initial parameter for BURA
-                    elif method == "bp":
-                        parameter = 1.   # Initial parameter for BP
-                    while(rational_error > coef * bw_global_estimator):
-                        if method == "bura":
-                            parameter += 1
-                        elif method == "bp":
-                            parameter -= 0.01
-                        rational_parameters, rational_error = rational_approximation(parameter, s)
         else:
             mesh = dolfinx.mesh.refine(mesh)
+    
+        if rational_adaptive:
+            # Rational scheme refinement
+            if ref_step <= 1:
+                coef = 1.
+            else:
+                coef = results["L2 bw"][-1]/results["L2 bw"][-2]
+
+            rational_error = np.Inf
+            if ref_step > 0:
+                if method == "bura":
+                    parameter = 1
+                while(rational_error > coef * bw_global_estimator): #results["L2 bw"][-1]): #bw_global_estimator):
+                    if method == "bura":
+                        parameter += 1
+                    elif method == "bp":
+                        parameter -= 0.01
+                    rational_parameters, rational_error = rational_approximation(parameter, s)
+            else:
+                if method == "bura":
+                    parameter = 1       # Initial parameter for BURA
+                elif method == "bp":
+                    parameter = 3.   # Initial parameter for BP
+                rational_parameters, rational_error = rational_approximation(parameter, s)
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
@@ -218,9 +182,6 @@ if __name__ == "__main__":
     # Finite element degree
     k = 1
 
-    # FE error tolerance
-    fe_tol = 5.e-4
-
     # Rational error tolerance
     ra_tol = 1.e-7
 
@@ -237,24 +198,30 @@ if __name__ == "__main__":
         values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
         return values
 
-    for FE_adaptive in [True]: #, False]:
+    for FE_adaptive in [True]:
         if FE_adaptive:
-            rational_adaptive_choices = [True, False]
+            rational_adaptive_choices = [True]
         else:
             rational_adaptive_choices = [False]
-        for rational_adaptive in [True]: #rational_adaptive_choices:
+        for rational_adaptive in rational_adaptive_choices: #rational_adaptive_choices:
             for method in ["bp", "bura"]:
-                for s in [0.3, 0.5, 0.7]:
+                for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
+                    if s==0.1:
+                        tol = 1.e-2
+                    if s==0.3:
+                        tol = 1.e-3
+                    if s>0.3:
+                        tol = 1.e-4
                     if method == "bp":
-                        parameter = 0.4    # Fineness parameter (in (0., 1.), more precise if close to 0.)
+                        parameter = 3.    # Fineness parameter (in (0., 1.), more precise if close to 0.)
                         # For coarse scheme
                         # parameter = 2.5   # (3 solves, error ~ 0.06)
                         rational_approximation = BP_rational_approximation
 
                     elif method == "bura":
-                        parameter = 9      # Degree of the rational approximation (integer, more precise if large)
+                        parameter = 1      # Degree of the rational approximation (integer, more precise if large)
                         # For coarse scheme
                         # parameter = 3     # (3 solves, error ~ 0.005)
                         rational_approximation = BURA_rational_approximation
 
-                    main(k, fe_tol, ra_tol, theta, mesh, f)
+                    main(k, tol, ra_tol, theta, mesh, f, parameter)
