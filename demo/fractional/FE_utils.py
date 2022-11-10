@@ -227,7 +227,6 @@ def parametric_problem(f, V, k, rational_parameters, bcs,
                                                      np.isclose(x[1], 0.0),
                                                      np.isclose(x[1], np.pi)))
         dofs = locate_dofs_geometrical(V_f, dof_locate)
-        print(dofs)
         # dofs = locate_dofs_topological(V_f, 1, facets)
         bcs = [dirichletbc(u0_f, dofs)]
 

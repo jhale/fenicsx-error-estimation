@@ -169,11 +169,11 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         df = pd.DataFrame(results)
         if FE_adaptive:
             if rational_adaptive:
-                df.to_csv(f"results_{method}_{str(s)[-1]}_FE_adaptive_rational_adaptive.csv")
+                df.to_csv(f"results/results_{method}_{str(s)[-1]}_FE_adaptive_rational_adaptive.csv")
             else:
-                df.to_csv(f"results_{method}_{str(s)[-1]}_FE_adaptive.csv")
+                df.to_csv(f"results/results_{method}_{str(s)[-1]}_FE_adaptive.csv")
         else:
-            df.to_csv(f"results_{method}_{str(s)[-1]}.csv")
+            df.to_csv(f"results/results_{method}_{str(s)[-1]}.csv")
         print(df)
 
         ref_step += 1
@@ -181,9 +181,6 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
 if __name__ == "__main__":   
     # Finite element degree
     k = 1
-
-    # Rational error tolerance
-    ra_tol = 1.e-7
 
     # Dorfler marking parameter
     theta = 0.3
@@ -202,16 +199,22 @@ if __name__ == "__main__":
         if FE_adaptive:
             rational_adaptive_choices = [True]
         else:
-            rational_adaptive_choices = [False]
+            rational_adaptive_choices = [False, True]
         for rational_adaptive in rational_adaptive_choices: #rational_adaptive_choices:
             for method in ["bp", "bura"]:
                 for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
                     if s==0.1:
                         tol = 1.e-2
+
+                        ra_tol = tol/2.
                     if s==0.3:
                         tol = 1.e-3
+
+                        ra_tol = tol/2.
                     if s>0.3:
                         tol = 1.e-4
+
+                        ra_tol = tol/2.
                     if method == "bp":
                         parameter = 3.    # Fineness parameter (in (0., 1.), more precise if close to 0.)
                         # For coarse scheme

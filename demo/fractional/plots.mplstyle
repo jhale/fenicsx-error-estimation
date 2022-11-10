@@ -1,0 +1,14 @@
+axes.labelsize : 12
+axes.linewidth : 2
+lines.linewidth : 3
+lines.markersize : 8
+xtick.labelsize : 12
+xtick.major.width : 2
+xtick.major.size : 8
+xtick.minor.width : 2
+xtick.minor.size : 4
+ytick.labelsize : 12
+ytick.major.width : 2
+ytick.major.size : 8
+ytick.minor.width : 2
+ytick.minor.size : 4

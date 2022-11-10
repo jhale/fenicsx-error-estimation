@@ -223,9 +223,9 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         
         df = pd.DataFrame(results)
         if rational_adaptive:
-            df.to_csv(f"results_{method}_{str(s)[-1]}_rational_adaptive.csv")
+            df.to_csv(f"results/results_{method}_{str(s)[-1]}_rational_adaptive.csv")
         else:
-            df.to_csv(f"results_{method}_{str(s)[-1]}.csv")
+            df.to_csv(f"results/results_{method}_{str(s)[-1]}.csv")
         print(df)
     
         ref_step += 1
@@ -235,11 +235,11 @@ if __name__ == "__main__":
     # Finite element degree
     k = 1
 
-    # Rational approximation tolerance
-    ra_tol = 1.e-7
-
     # Tolerance
     tol = 1.e-4
+
+    # Rational approximation tolerance
+    ra_tol = tol/2. #1.e-7
 
     # Dorfler marking parameter
     theta = 0.3
