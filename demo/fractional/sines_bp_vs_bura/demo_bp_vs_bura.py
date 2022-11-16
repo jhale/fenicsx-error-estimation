@@ -40,18 +40,22 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
     def u_exact(x):
         values = 2.**(-s) * np.sin(x[0]) * np.sin(x[1])
         return values
+    
+    L2_norm_f = np.pi/2.    # ||f||_{L2} = pi/2 in this case
 
-    if not rational_adaptive:
-        rational_error = np.Inf
-        while(rational_error > ra_tol):
+    if rational_adaptive:
+        rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
+        rational_estimator = rational_scalar_estimator * L2_norm_f
+    else:
+        rational_estimator = np.Inf
+        while(rational_estimator > ra_tol):
             if method == "bp":
                 parameter -= 0.01
             elif method == "bura":
                 parameter += 1
 
-            rational_parameters, rational_error = rational_approximation(parameter, s)
-    else:
-        rational_parameters, rational_error = rational_approximation(parameter, s)
+            rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
+            rational_estimator = rational_scalar_estimator * L2_norm_f
 
     df_rational_parameters = pd.DataFrame(rational_parameters)
     df_rational_parameters.to_csv(output_dir + "rational_parameters.csv")
@@ -108,13 +112,14 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
                                              L_form, cst_1, cst_2,
                                              ref_step=ref_step,
                                              output_dir=output_dir,
-                                             sines_test_case=True)
+                                             sines_test_case=True,
+                                             method=method)
         # FE estimator
         bw_sq_local_estimator = estimators["L2 squared local BW"]
         bw_global_estimator = estimators["L2 global BW"]
 
         # Rational estimator
-        rational_estimator = rational_error * np.pi/2. # ||f||_{L2} = pi/2 in this case
+        rational_estimator = rational_scalar_estimator * L2_norm_f
 
         df_rational_parameters = pd.DataFrame(rational_parameters)
         df_rational_parameters.to_csv(output_dir + f"rational_parameters_{ref_step}.csv")
@@ -151,7 +156,7 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         # Exact rational error
         e_rational = u_V_f - u_Q_V_f
         err_2 = assemble_scalar(form(inner(e_rational, e_rational) * dx))
-        rational_err = np.sqrt(err_2)
+        exact_rational_error = np.sqrt(err_2)
 
         # Exact FE error
         e_FE = u_Q_V_f - u_h_V_f
@@ -184,7 +189,8 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
                 "w") as fo:
             fo.write_mesh(mesh)
             fo.write_function(bw_sq_local_estimator)
-
+        
+        rational_error = np.Inf
         if rational_adaptive:
             # Rational scheme refinement
             if ref_step <= 1:
@@ -192,22 +198,13 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
             else:
                 coef = results["L2 bw"][-1]/results["L2 bw"][-2]
 
-            rational_error = np.Inf
-            if ref_step > 0:
+            while(rational_estimator > coef * bw_global_estimator):
                 if method == "bura":
-                    parameter = 1
-                while(rational_error > coef * bw_global_estimator): #results["L2 bw"][-1]): #bw_global_estimator):
-                    if method == "bura":
-                        parameter += 1
-                    elif method == "bp":
-                        parameter -= 0.01
-                    rational_parameters, rational_error = rational_approximation(parameter, s)
-            else:
-                if method == "bura":
-                    parameter = 1       # Initial parameter for BURA
+                    parameter += 1
                 elif method == "bp":
-                    parameter = 3.   # Initial parameter for BP
-                rational_parameters, rational_error = rational_approximation(parameter, s)
+                    parameter -= 0.01
+                rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
+                rational_estimator = rational_scalar_estimator * L2_norm_f
 
         mesh = dolfinx.mesh.refine(mesh)    # This test case doesn't require adaptive refinement
 
@@ -215,7 +212,7 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         results["total error"].append(total_err)
         results["total estimator"].append(total_estimator)
         results["L2 bw"].append(bw_global_estimator)
-        results["rational error"].append(rational_err)
+        results["rational error"].append(exact_rational_error)
         results["rational estimator"].append(rational_estimator)
         results["FE error"].append(FE_err)
         results["rational parameter"].append(parameter)
@@ -239,7 +236,7 @@ if __name__ == "__main__":
     tol = 1.e-4
 
     # Rational approximation tolerance
-    ra_tol = tol/2. #1.e-7
+    ra_tol = tol/10.
 
     # Dorfler marking parameter
     theta = 0.3
@@ -254,18 +251,14 @@ if __name__ == "__main__":
         return values
 
     for rational_adaptive in [False]:
-        for method in ["bura"]:
-            for s in [0.1]:
+        for method in ["bura", "bp"]:
+            for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
                 if method == "bp":
-                    parameter = 3.    # Fineness parameter (in (0., 1.), more precise if close to 0.)
-                    # For coarse scheme
-                    # parameter = 2.5   # (3 solves, error ~ 0.06)
+                    parameter = 3.
                     rational_approximation = BP_rational_approximation
 
                 elif method == "bura":
-                    parameter = 1      # Degree of the rational approximation (integer, more precise if large)
-                    # For coarse scheme
-                    # parameter = 3     # (3 solves, error ~ 0.005)
+                    parameter = 1
                     rational_approximation = BURA_rational_approximation
 
                 main(k, tol, ra_tol, theta, mesh, f, parameter)

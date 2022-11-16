@@ -29,6 +29,8 @@ from FE_utils import mesh_refinement, parametric_problem
 
 
 def main(k, tol, ra_tol, theta, mesh, f, parameter):
+    L2_norm_f = 1.    # ||f||_{L2} = 1 in this case
+
     if FE_adaptive:
         if rational_adaptive:
             output_dir = "output/" + method + "_FE_adaptive" + "_rational_adaptive" + f"_{str(s)[-1]}/"
@@ -51,9 +53,11 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
             elif method == "bura":
                 parameter += 1
 
-            rational_parameters, rational_error = rational_approximation(parameter, s)
+            rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
     else:
-        rational_parameters, rational_error = rational_approximation(parameter, s)
+        rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
+
+    rational_estimator = rational_scalar_estimator * L2_norm_f
 
     # Results storage
     results = {"dof num": [], "rational parameter": [], "num solves": [],  "L2 bw": [], "rational estimator": [], "total estimator": []}
@@ -111,9 +115,6 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         bw_sq_local_estimator = estimators["L2 squared local BW"]
         bw_global_estimator = estimators["L2 global BW"]
 
-        # Rational estimator
-        rational_estimator = rational_error # ||f||_{L2} = 1. in this case
-
         df_rational_parameters = pd.DataFrame(rational_parameters)
         df_rational_parameters.to_csv(output_dir + f"rational_parameters_{ref_step}.csv")
 
@@ -135,6 +136,7 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         else:
             mesh = dolfinx.mesh.refine(mesh)
     
+        rational_error = np.Inf
         if rational_adaptive:
             # Rational scheme refinement
             if ref_step <= 1:
@@ -142,22 +144,13 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
             else:
                 coef = results["L2 bw"][-1]/results["L2 bw"][-2]
 
-            rational_error = np.Inf
-            if ref_step > 0:
+            while(rational_estimator > coef * bw_global_estimator):
                 if method == "bura":
-                    parameter = 1
-                while(rational_error > coef * bw_global_estimator): #results["L2 bw"][-1]): #bw_global_estimator):
-                    if method == "bura":
-                        parameter += 1
-                    elif method == "bp":
-                        parameter -= 0.01
-                    rational_parameters, rational_error = rational_approximation(parameter, s)
-            else:
-                if method == "bura":
-                    parameter = 1       # Initial parameter for BURA
+                    parameter += 1
                 elif method == "bp":
-                    parameter = 3.   # Initial parameter for BP
-                rational_parameters, rational_error = rational_approximation(parameter, s)
+                    parameter -= 0.01
+                rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
+                rational_estimator = rational_scalar_estimator * L2_norm_f
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
@@ -206,15 +199,15 @@ if __name__ == "__main__":
                     if s==0.1:
                         tol = 1.e-2
 
-                        ra_tol = tol/2.
+                        ra_tol = tol/10.
                     if s==0.3:
                         tol = 1.e-3
 
-                        ra_tol = tol/2.
+                        ra_tol = tol/10.
                     if s>0.3:
                         tol = 1.e-4
 
-                        ra_tol = tol/2.
+                        ra_tol = tol/10.
                     if method == "bp":
                         parameter = 3.    # Fineness parameter (in (0., 1.), more precise if close to 0.)
                         # For coarse scheme

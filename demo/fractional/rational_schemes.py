@@ -18,8 +18,6 @@ def BP_rational_approximation(kappa, s):
             constant: multiplicative constant in front of the sum
         err: the rational approximation error estimation
     """
-    rational_parameters = {"c_1s": None, "c_2s": None, "weights": None,
-                           "constant": 0}
 
     M = np.ceil((np.pi**2) / (4. * s * kappa**2))
     N = np.ceil((np.pi**2) / (4. * (1. - s) * kappa**2))
@@ -30,8 +28,11 @@ def BP_rational_approximation(kappa, s):
     weights = np.exp(2. * s * kappa * ls)
     constant = (2. * np.sin(np.pi * s) * kappa) / np.pi
 
-    rational_parameters = {"c_1s": c_1s, "c_2s": c_2s, "weights": weights,
-                           "constant": constant, "initial constant": 0.}   # There is no initial term in this method so initial_constant must be 0.
+    rational_parameters = {"c_1s": c_1s,
+                           "c_2s": c_2s,
+                           "weights": weights,
+                           "constant": constant,
+                           "initial constant": 0.}   # There is no initial term in this method so initial_constant must be 0.
     
     # Rational error estimation
     xs = np.linspace(1., 1e8, 10000)
@@ -79,10 +80,11 @@ def BURA_rational_approximation(degree, s):
     weights = res_brasil/pol_brasil
     constant = 1.
 
-    rational_parameters = {"c_1s": c_1s, "c_2s": c_2s,
-                        "weights": weights,
-                        "constant": constant,
-                        "initial constant": r_brasil(0.)}
+    rational_parameters = {"c_1s": c_1s,
+                           "c_2s": c_2s,
+                           "weights": weights,
+                           "constant": constant,
+                           "initial constant": r_brasil(0.)}
 
     # Rational error estimation
     def rational_sum(xs):

@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import matplotlib.cm as cm
-from mpltools import annotation
+from marker import marker
 
 pd.set_option('display.expand_frame_repr', False)
 colors = [cm.get_cmap('tab20c')(i / 20.) for i in range(20)]
@@ -14,28 +15,6 @@ middleorange =  colors[9]
 lightorange =   colors[10]
 
 plt.style.use("./plots.mplstyle")
-
-def marker(x_data, y_datas, position, gap):
-    middle = np.floor(len(x_data)/2.).astype(np.int32)
-    anchor_1_1 = []
-    anchor_2_1 = []
-
-    for data in y_datas:
-        anchor_1_1.append(data[middle])
-        anchor_2_1.append(data[-1])
-    anchor_1_1 = min(anchor_1_1)
-    anchor_2_1 = min(anchor_2_1)
-
-    anchor_1_0 = x_data[middle]
-    anchor_2_0 = x_data[-1]
-
-    anchor_1 = [anchor_1_0, anchor_1_1]
-    anchor_2 = [anchor_2_0, anchor_2_1]
-    marker_x = anchor_1[0]**position*anchor_2[0]**(1.-position)\
-            * (anchor_2[1]/anchor_1[1])**gap
-    marker_y = anchor_1[1]**position*anchor_2[1]**(1.-position)\
-            * (anchor_1[0]/anchor_2[0])**gap
-    return marker_x, marker_y
 
 def slopes(xs, ys):
     xs = xs[-8:]
@@ -55,7 +34,9 @@ def results_table(dr):
                     "dof total num.":           [],
                     "total error slope":        [],
                     "total estimator slope":    [],
-                    "efficiency":               []}
+                    "total est. efficiency":    [],
+                    "ra est. efficiency":       [],
+                    "FE est. efficiency":       []}
 
     for method in ["bp", "bura"]:
         for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
@@ -96,13 +77,25 @@ def results_table(dr):
                 if "total error" in df:
                     ys_err = df["total error"].values
                     slope_err = slopes(xs, ys_err)
-                    efficiency = np.mean(ys[-5:]/ys_err[-5:])
+                    total_efficiency = np.mean(ys[-5:]/ys_err[-5:])
+
+                    ra_est = df["rational estimator"].values
+                    ra_err = df["rational error"].values
+                    ra_efficiency = np.mean(ra_est[-5:]/ra_err[-5:])
+
+                    FE_est = df["L2 bw"].values
+                    FE_err = df["FE error"].values
+                    FE_efficiency = np.mean(FE_est[-5:]/FE_err[-5:])
                 else:
                     slope_err = None
-                    efficiency = None
+                    total_efficiency = None
+                    ra_efficiency = None
+                    FE_efficiency = None
                 
                 disp_results["total error slope"].append(slope_err)
-                disp_results["efficiency"].append(efficiency)
+                disp_results["total est. efficiency"].append(total_efficiency)
+                disp_results["ra est. efficiency"].append(ra_efficiency)
+                disp_results["FE est. efficiency"].append(FE_efficiency)
 
     df_results = pd.DataFrame(disp_results)
     df_results.to_csv(f"./{dr}/results/results.csv")
@@ -113,7 +106,7 @@ def convergence_plots(dr):
         for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
             df = pd.read_csv(f"./{dr}/results/results_{method}_{str(s)[-1]}.csv")
 
-            plt.figure()
+            figure = plt.figure()
 
             xs = df["dof num"].values
             ys = df["total estimator"].values
@@ -126,23 +119,23 @@ def convergence_plots(dr):
                 plt.loglog(xs, ys_err, "^--", color=lightblue)
                 y_datas.append(ys_err)
             
-            marker_x, marker_y = marker(xs, y_datas, 0.2, 0.05)
-            annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
+            marker(figure, xs, y_datas, 0.2, 1., slope=1, loglog=True)
             plt.annotate(method.upper() + f", s={s}", xy=(0.99,0.95), xycoords="axes fraction", size=13, horizontalalignment='right')
             plt.xlabel("dof")
             plt.savefig(f"{dr}/results/conv_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
 
 def cumulative_convergence_plots(dr):
-    styles = ["^-", "o--", "o--", "s-."]
+    styles_1 = ["^-", "^--", "o-", "s-"]
+    styles_2 = ["o-", "o--", "o-.", ""]
     colors = [[darkblue, darkorange], 
               [middleblue, middleorange],
               [lightblue, lightorange]]
     adaptation_methods = ["None", "ra", "FE", "FE + ra"]
     for method in ["bura", "bp"]:
         for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
-            plt.figure()
+            figure = plt.figure()
             i=0
-            for adaptation, style in zip(adaptation_methods, styles):
+            for adaptation, style_1, style_2 in zip(adaptation_methods, styles_1, styles_2):
                 if adaptation == "FE":
                     adapt_str = "_FE_adaptive"
                 elif adaptation == "ra":
@@ -159,29 +152,28 @@ def cumulative_convergence_plots(dr):
 
                 xs = df["num solves"].values * df["dof num"].values
                 ys = df["total estimator"].values
-                y_datas = [ys]
+                if i==0:
+                    y_datas = [ys]
                 
-                plt.loglog(xs, ys, style, color=colors[i][0], label=f"est. ({adaptation})")
+                plt.loglog(xs, ys, style_1, color=colors[i][0], label=f"est. ({adaptation})")
 
                 if "total error" in df:
                     ys_err = df["total error"].values
-                    y_datas.append(ys_err)
-                    plt.loglog(xs, ys_err, style, color=colors[i][1], label=f"err. ({adaptation})")
-                
+                    plt.loglog(xs, ys_err, style_2, color=colors[i][1], label=f"err. ({adaptation})")
+                    if i == 0:
+                        y_datas = [ys_err]
                 i += 1
-                
+
             plt.xlabel(r"dof num. $\times$ solves num.")
-            #marker_x, marker_y = marker(xs, y_datas, 0.1, 0.05)
-            #annotation.slope_marker((marker_x, marker_y), (-1, 1), invert=True)
+            #plt.legend(loc=3)
+            marker(figure, xs, y_datas, 0.2, 0.8, slope=1, loglog=True)
             plt.annotate(method.upper() + f", s={s}", xy=(0.99,0.95), xycoords="axes fraction", size=13, horizontalalignment='right')
-            plt.legend(loc=3)
             plt.savefig(f"{dr}/results/cumulative_conv_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
 
 def comparison_FE_ra(dr):
     for method in ["bp", "bura"]:
         for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
             plt.figure()
-            plt.title(method + f" s={str(s)}")
 
             try:
                 df = pd.read_csv(f"./{dr}/results/results_{method}_{str(s)[-1]}_rational_adaptive.csv")
@@ -195,10 +187,68 @@ def comparison_FE_ra(dr):
             plt.loglog(xs, ys_bw, "^--", label=f"FE")
             plt.loglog(xs, ys_ra, "^--", label=f"ra")
 
-            plt.legend(loc=3)
-            plt.xlabel("total dof")
+            # plt.legend(loc=3)
+            plt.xlabel(r"dof num. $\times$ solves num.")
             plt.annotate(method.upper() + f", s={s}", xy=(0.99,0.95), xycoords="axes fraction", size=13, horizontalalignment='right')
-            plt.savefig(f"{dr}/results/FE_vs_ra_{method}_{str(s)[-1]}.pdf")
+            plt.savefig(f"{dr}/results/FE_vs_ra_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
+
+def evolution_dof(dr):
+    styles = ["^-", "o--", "o--", "s-."]
+    colors = [[darkblue, darkorange], 
+              [middleblue, middleorange],
+              [lightblue, lightorange]]
+    adaptation_methods = ["None", "ra", "FE", "FE + ra"]
+    for method in ["bura", "bp"]:
+        for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
+            figure = plt.figure()
+            i=0
+            for adaptation, style in zip(adaptation_methods, styles):
+                if adaptation == "FE":
+                    adapt_str = "_FE_adaptive"
+                elif adaptation == "ra":
+                    adapt_str = "_rational_adaptive"
+                elif adaptation == "FE + ra":
+                    adapt_str = "_FE_adaptive_rational_adaptive"
+                else:
+                    adapt_str = ""
+                
+                try:
+                    df = pd.read_csv(f"./{dr}/results/results_{method}_{str(s)[-1]}{adapt_str}.csv")
+                except FileNotFoundError:
+                    continue
+
+                ys = np.cumsum(df["num solves"].values * df["dof num"].values)
+                xs = np.arange(len(ys))
+                
+                plt.semilogy(xs, ys, style, color=colors[i][0], label=f"dof num ({adaptation})")
+                i += 1
+
+            plt.xlabel(r"ref. step")
+            plt.legend(loc=2)
+            plt.savefig(f"{dr}/results/evolution_dof_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
+
+def parametric_errors(dr):
+    for method in ["bura", "bp"]:
+        for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
+            figure = plt.figure()
+            plt.style.use("./parametric_plots.mplstyle")
+            df = pd.read_csv(f"./{dr}/output/{method}_{str(s)[-1]}/parametric_results_{method}_5.csv")
+
+            ys = df["parametric exact error"].values
+            ys /= np.max(ys)
+            xs = df["parametric index"].values
+
+            plt.plot(xs, ys)
+            if method=="bp":
+                if s==0.1:
+                    plt.annotate(method.upper() + f", s={s}", xy=(0.01,0.03), xycoords="axes fraction", size=18, horizontalalignment='left')
+                else:
+                    plt.annotate(method.upper() + f", s={s}", xy=(0.99,0.93), xycoords="axes fraction", size=18, horizontalalignment='right')
+            else:
+                plt.annotate(method.upper() + f", s={s}", xy=(0.99,0.03), xycoords="axes fraction", size=18, horizontalalignment='right')
+            plt.xlabel(r"Parametric index $l$")
+            # plt.ylabel(r"$e_l/\max_{-M\leqslant l \leqslant N}(e_l)$")
+            plt.savefig(f"{dr}/results/parametric_error_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
 
 if __name__=="__main__":
     dirs = ["sines_bp_vs_bura", "checkerboard_bp_vs_bura"]
@@ -209,3 +259,6 @@ if __name__=="__main__":
         convergence_plots(dr)
         cumulative_convergence_plots(dr)
         comparison_FE_ra(dr)
+        evolution_dof(dr)
+
+    parametric_errors("sines_bp_vs_bura")
