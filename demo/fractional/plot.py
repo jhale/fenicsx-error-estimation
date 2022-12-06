@@ -17,8 +17,8 @@ lightorange =   colors[10]
 plt.style.use("./plots.mplstyle")
 
 def slopes(xs, ys):
-    xs = xs[-8:]
-    ys = ys[-8:]
+    xs = xs[-10:]
+    ys = ys[-10:]
     A = np.vstack([np.log(xs), np.ones_like(xs)]).T
 
     m = np.linalg.lstsq(A, np.log(ys), rcond=None)[0][0]
@@ -135,6 +135,7 @@ def cumulative_convergence_plots(dr):
         for s in [0.1, 0.3, 0.5, 0.7, 0.9]:
             figure = plt.figure()
             i=0
+            y_datas = []
             for adaptation, style_1, style_2 in zip(adaptation_methods, styles_1, styles_2):
                 if adaptation == "FE":
                     adapt_str = "_FE_adaptive"
@@ -149,19 +150,19 @@ def cumulative_convergence_plots(dr):
                     df = pd.read_csv(f"./{dr}/results/results_{method}_{str(s)[-1]}{adapt_str}.csv")
                 except FileNotFoundError:
                     continue
+                #print(f"./{dr}/results/results_{method}_{str(s)[-1]}{adapt_str}.csv")
+                #print(df)
 
                 xs = df["num solves"].values * df["dof num"].values
                 ys = df["total estimator"].values
-                if i==0:
-                    y_datas = [ys]
+                y_datas.append(ys)
                 
                 plt.loglog(xs, ys, style_1, color=colors[i][0], label=f"est. ({adaptation})")
 
                 if "total error" in df:
                     ys_err = df["total error"].values
                     plt.loglog(xs, ys_err, style_2, color=colors[i][1], label=f"err. ({adaptation})")
-                    if i == 0:
-                        y_datas = [ys_err]
+                    y_datas.append(ys_err)
                 i += 1
 
             plt.xlabel(r"dof num. $\times$ solves num.")
@@ -224,6 +225,7 @@ def evolution_dof(dr):
                 i += 1
 
             plt.xlabel(r"ref. step")
+            plt.ylabel(r"$\eta^{\mathrm{bw}}_{\mathcal{Q}_s}$")
             plt.legend(loc=2)
             plt.savefig(f"{dr}/results/evolution_dof_{method}_{str(s)[-1]}.pdf", bbox_inches="tight")
 
@@ -254,7 +256,7 @@ if __name__=="__main__":
     dirs = ["sines_bp_vs_bura", "checkerboard_bp_vs_bura"]
 
     for dr in dirs:
-        print(dr)
+        #print(dr)
         results_table(dr)
         convergence_plots(dr)
         cumulative_convergence_plots(dr)

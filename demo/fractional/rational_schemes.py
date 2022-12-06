@@ -1,7 +1,7 @@
 import baryrat as br
 import numpy as np
 
-def BP_rational_approximation(kappa, s):
+def BP_rational_approximation(kappa, s, spectrum_bound=1.e8):
     """
     Generates the parameters for the rational sum according to exponentially
     convergent scheme in Bonito and Pasciak 2013.
@@ -35,7 +35,7 @@ def BP_rational_approximation(kappa, s):
                            "initial constant": 0.}   # There is no initial term in this method so initial_constant must be 0.
     
     # Rational error estimation
-    xs = np.linspace(1., 1e8, 10000)
+    xs = np.linspace(1., spectrum_bound, 10000)
 
     ys = []
     for x in xs:
@@ -49,7 +49,7 @@ def BP_rational_approximation(kappa, s):
     return rational_parameters, err
 
 
-def BURA_rational_approximation(degree, s):
+def BURA_rational_approximation(degree, s, spectrum_bound=1.e8):
     """
     Generates the parameters for the BURA using the BRASIL method from Hofreither 2020.
 
@@ -69,7 +69,7 @@ def BURA_rational_approximation(degree, s):
     def r(x):           # BURA method approximate x^s instead of x^{-s}
         return x**s
 
-    domain = [1e-8, 1.] # The upper bound is lambda_1^{-1} where lambda_1 is the lowest eigenvalue, in this case lambda_1 = 1
+    domain = [1./spectrum_bound, 1.] # The upper bound is lambda_1^{-1} where lambda_1 is the lowest eigenvalue, in this case lambda_1 = 1
     xs = np.linspace(domain[0], 1., 10000)
 
     r_brasil = br.brasil(r, domain, degree)

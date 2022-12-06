@@ -135,22 +135,6 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
             mesh = mesh_refinement(mesh, bw_sq_local_estimator,  bw_global_estimator, theta)
         else:
             mesh = dolfinx.mesh.refine(mesh)
-    
-        rational_error = np.Inf
-        if rational_adaptive:
-            # Rational scheme refinement
-            if ref_step <= 1:
-                coef = 1.
-            else:
-                coef = results["L2 bw"][-1]/results["L2 bw"][-2]
-
-            while(rational_estimator > coef * bw_global_estimator):
-                if method == "bura":
-                    parameter += 1
-                elif method == "bp":
-                    parameter -= 0.01
-                rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s)
-                rational_estimator = rational_scalar_estimator * L2_norm_f
 
         results["dof num"].append(V.dofmap.index_map.size_global)
         results["L2 bw"].append(bw_global_estimator)
@@ -158,6 +142,32 @@ def main(k, tol, ra_tol, theta, mesh, f, parameter):
         results["rational parameter"].append(parameter)
         results["total estimator"].append(total_estimator)
         results["num solves"].append(len(rational_parameters["c_1s"]))
+
+        element = ufl.FiniteElement("CG", mesh.ufl_cell(), k)
+        V = FunctionSpace(mesh, element)
+
+        rational_error = np.Inf
+        if rational_adaptive:
+            # Rational scheme refinement
+            if ref_step > 1:
+                coef = results["L2 bw"][-1]/results["L2 bw"][-2]
+                ln_bw_current = np.log(results["L2 bw"][-1])
+                ln_bw_past = np.log(results["L2 bw"][-2])
+                ln_dof_next = np.log(V.dofmap.index_map.size_global)
+                ln_dof_current = np.log(results["dof num"][-1])
+                ln_dof_past = np.log(results["dof num"][-2])
+                coef = np.exp((ln_bw_current - ln_bw_past) * (ln_dof_next - ln_dof_current)/(ln_dof_current - ln_dof_past))
+    
+                ra_past = results["rational estimator"][-1]
+                spectrum_bound = (bw_global_estimator/L2_norm_f)**(-1./s)
+                
+                while(rational_estimator > coef * results["L2 bw"][-1]):
+                    if method == "bura":
+                        parameter += 1
+                    elif method == "bp":
+                        parameter -= 0.01
+                    rational_parameters, rational_scalar_estimator = rational_approximation(parameter, s) #, spectrum_bound=spectrum_bound)
+                    rational_estimator = rational_scalar_estimator * L2_norm_f
 
         df = pd.DataFrame(results)
         if FE_adaptive:
