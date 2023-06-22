@@ -6,48 +6,76 @@ import numpy as np
 
 import dolfinx
 import ufl
-from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
-                         dirichletbc, form, locate_dofs_topological, set_bc)
+from dolfinx.fem import (Constant,
+                         Function,
+                         FunctionSpace,
+                         apply_lifting,
+                         dirichletbc,
+                         form,
+                         locate_dofs_topological,
+                         set_bc)
 from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
-from dolfinx.mesh import (CellType, compute_incident_entities,
-                          create_unit_square, locate_entities_boundary)
-from ufl import (Coefficient, Measure, TestFunction, TrialFunction, avg, div,
-                 grad, inner, jump)
+from dolfinx.mesh import (CellType,
+                          compute_incident_entities,
+                          create_unit_square,
+                          locate_entities_boundary)
+from ufl import (Coefficient,
+                 Measure,
+                 TestFunction,
+                 TrialFunction,
+                 avg,
+                 div,
+                 grad,
+                 inner,
+                 jump)
 
 from mpi4py import MPI
 from petsc4py import PETSc
 import pandas as pd
 
+
 import os
+import shutil
 import sys
 sys.path.append("../")
 
 from rational_schemes import BP_rational_approximation, BURA_rational_approximation
 from FE_utils import mesh_refinement, parametric_problem
 
-"""
-solve_parametric: solves the finite element parametric problem given by
-cst_1 * u - cst_2 Delta u = f
-on the mesh corresponding to the given refinement_index.
-
 
 """
-def solve_parametric(mesh, cst_1, cst_2):
+========================================================================
+solve_parametric:   Solves the finite element parametric problem.
+
+\param[in] mesh     The FE mesh on which the problem is solved.
+\param[in] c_diff   Float, the diffusion coefficient.
+\param[in] c_react  Float, the reaction coefficient.
+
+return     u_param  The FE solution of the parametric problem.
+========================================================================
+"""
+def solve_parametric(fe_degree, source_data, mesh, c_diff, c_react):
+    assert (c_diff > 0.) or (c_react > 0.)
+
     # Measure, FE space and trial/test functions definitions
     dx = Measure("dx", domain=mesh)
-    element = ufl.FiniteElement("CG", mesh.ufl_cell(), k)
+    element = ufl.FiniteElement("CG", mesh.ufl_cell(), fe_degree)
     V = FunctionSpace(mesh, element)
     u = TrialFunction(V)
     v = TestFunction(V)
 
     # Interpolation of data
     f_V = Function(V)
-    f_V.interpolate(f)
+    f_V.interpolate(source_data)
+
+    # Reaction and diffusion coefficients
+    # cst_diff  = Coefficient(V, c_diff)
+    # cst_react = Coefficient(V, c_react)
 
     # Bilinear and linear forms
-    a_form = form(cst_1 * inner(grad(u), grad(v)) * dx
-                + cst_2 * inner(u, v) * dx)
+    a_form = form(c_diff * inner(grad(u), grad(v)) * dx
+                + c_react * inner(u, v) * dx)
     L_form = form(inner(f_V, v) * dx)
 
     # Homogeneous Dirichlet boundary conditions
@@ -84,7 +112,22 @@ def solve_parametric(mesh, cst_1, cst_2):
     
     return u_param
 
-def estimate_parametric(cst_1, cst_2, u_param):
+
+"""
+========================================================================
+estimate_parametric:    Estimate the discretization error for a
+                        reaction-diffusion problem.
+
+\param[in]  cst_1       The diffusion coefficient.
+\param[in]  cst_2       The reaction coefficient.
+\param[in]  u_param     The FE solution of the problem.
+
+return      eta_h       DG0 FE function stocking the values of the local
+                        estimators.
+            e_h_f       CG V_f FE function stocking the local BW solutions.
+========================================================================
+"""
+def estimate_parametric(source_data, c_diff, c_react, u_param):
     V = u_param.function_space
     mesh = V.mesh
     ufl_domain = mesh.ufl_domain()
@@ -103,16 +146,16 @@ def estimate_parametric(cst_1, cst_2, u_param):
     e_f = ufl.TrialFunction(V_f)
     v_f = ufl.TestFunction(V_f)
     f_f = Function(V_f)
-    f_f.interpolate(f)
+    f_f.interpolate(source_data)
 
     n = ufl.FacetNormal(ufl_domain)
 
     # Bilinear form (two constants)
-    a_ef = cst_1*inner(grad(e_f), grad(v_f)) * dx + cst_2*inner(e_f, v_f) * dx
+    a_ef = c_diff*inner(grad(e_f), grad(v_f)) * dx + c_react*inner(e_f, v_f) * dx
 
     # Linear form (two coefficients, two constants)
-    L_ef = inner(f_f + cst_1 * div(grad(u_param)) - cst_2 * u_param, v_f)*dx\
-         + inner(cst_1 * jump(grad(u_param), -n), avg(v_f)) * dS
+    L_ef = inner(f_f + c_diff * div(grad(u_param)) - c_react * u_param, v_f)*dx\
+         + inner(c_diff * jump(grad(u_param), -n), avg(v_f)) * dS
 
     # Error form (one coefficient)
     V_e = FunctionSpace(mesh, element_e)
@@ -136,157 +179,303 @@ def estimate_parametric(cst_1, cst_2, u_param):
     e_D_f.vector.set(0.)
 
     fenicsx_error_estimation.estimate(
-        eta_h, a_ef, L_ef, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D_f, diagonal=max(1., cst_1.value))
+        eta_h, a_ef, L_ef, L_eta, N, boundary_entities_sorted, e_h=e_h_f, e_D=e_D_f, diagonal=max(1., c_diff))
 
     return eta_h, e_h_f
 
-def mesh_refinement(mesh, sq_local_estimator, global_estimator, theta=0.3):
-    """
-    Uses Dörfler marking to refine the mesh based on the values of the estimator.
-    Parameters:
-        mesh: the initial mesh on which the estimator has been computed
-        sq_local_estimator: the square root of the local contributions of the estimator
-        global_estimtor: the global estimator
-        theta: the Dörfler marking parameter (the standard value is theta=0.3)
-    Returns:
-        mesh: the refined mesh.
-    """
-    # Dörfler marking
-    eta_global = global_estimator**2
-    cutoff = theta * eta_global
 
+"""
+========================================================================
+marking:    Mark the meshes with respect to the given parametric estimators
+            using a Dörfler-like algorithm.
+
+\param[in]  ls_eta_param_vects       List of lists, the weighted
+                                     squared values of the local estimators.
+\param[in]  rational_constant        Float, multiplicative constant in front of
+                                     the rational sum.
+\param[in]  theta                    Float, Dörfler's algorithm parameter
+                                     (in (0,1)).
+
+returns     unsorted_marked_cells    List of lists, unsorted lists of marked
+                                     cells for each parametric mesh.
+========================================================================
+"""
+def marking(ls_eta_param_vects, num_param_pbms, rational_constant, theta=0.35):
+    # Compute the global estimator value
+    global_est = compute_est(ls_eta_param_vects, rational_constant)
+    cutoff = theta * global_est
+
+    # Compute and concatenate the indices arrays and estimator values array
+    param_indices = []
+    cells_indices = []
+    for i, est in enumerate(ls_eta_param_vects):
+        param_indices.append([i for _ in range(len(est))])
+        cells_indices.append(list(range(len(est))))
+    
+    param_ind_concat        = np.concatenate(param_indices)
+    cells_ind_concat        = np.concatenate(cells_indices)
+    eta_param_vects_concat  = np.concatenate(ls_eta_param_vects)
+
+    # Store the concatenated arrays in a single Nx3 numpy array
+    param_cell_est      = np.zeros((len(eta_param_vects_concat), 3))
+    param_cell_est[:,0] = param_ind_concat
+    param_cell_est[:,1] = cells_ind_concat
+    param_cell_est[:,2] = eta_param_vects_concat
+
+    # Doesn't work in parallel
     assert MPI.COMM_WORLD.size == 1
-    sorted_cells = np.argsort(sq_local_estimator.vector.array)[::-1]
+
+    # Sort the estimators values in decreasing order and sorting
+    # the indices accordingly
+    sorted_ind = np.argsort(param_cell_est[:,2])[::-1]
+    param_cell_est = param_cell_est[sorted_ind]
+
+    sorted_param_indices    = param_cell_est[:,0].astype(np.intc)
+    sorted_cells_indices    = param_cell_est[:,1].astype(np.intc)
+    sorted_weighted_sq_est  = param_cell_est[:,2]
+
+    # List of lists of marked meshes cells (each list corresponds to a parametric problem)
+    selected_est_values     = [[] for _ in range(num_param_pbms)]
+    unsorted_marked_cells   = [[] for _ in range(num_param_pbms)]
+
     rolling_sum = 0.
-    for i, e in enumerate(sq_local_estimator.vector.array[sorted_cells]):
-        rolling_sum += e
-        if rolling_sum > cutoff:
+    for i, cell_index, param_index, est in zip(range(len(sorted_param_indices)), #
+                                               sorted_cells_indices, #
+                                               sorted_param_indices, #
+                                               sorted_weighted_sq_est):
+        printlog(f"\t \t Dörfler loop step {i} / {len(sorted_param_indices)}")
+
+        selected_est_values[param_index].append(est)
+        partial_est = compute_est(selected_est_values, rational_constant)
+        unsorted_marked_cells[param_index].append(cell_index)
+        if partial_est > cutoff:
             breakpoint = i
             break
-
-    refine_cells = sorted_cells[0:breakpoint + 1]
-    indices = np.array(np.sort(refine_cells), dtype=np.int32)
-    edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 1)
-
-    # Refine mesh
-    mesh.topology.create_entities(mesh.topology.dim - 1)
-    mesh = dolfinx.mesh.refine(mesh, edges)
-
-    return mesh
-
-def parametric_refinement(e_frac_f, parametric_bw_solutions, parametric_estimators, refinement_indices, refinement_bool, theta=1.1):
-    V_f = e_frac_f.function_space
-    min_estimator = min(parametric_estimators)
-
-    i = 0
-    for parametric_bw_solution, parametric_estimator in zip(parametric_bw_solutions, parametric_estimators):
-        if parametric_estimator >= theta * min_estimator:
-            refinement_indices[i] += 1
-            refinement_bool = True
-            e_h_fine_mesh = Function(V_f)
-            e_h_fine_mesh.interpolate(parametric_bw_solution)   # Doesn't work because interpolate does not support inter-mesh interpolation yet.
-            e_frac_f.vector.axpy()
+    
+    return unsorted_marked_cells
 
 
+"""
+========================================================================
+compute_est: Compute the fractional estimator based on a selection of local
+             estimator values for each parametric problem. Used in the marking
+             strategy.
 
-if __name__=="__main__":
+\param[in]  ls_eta_param_vects  List of lists, the weighted
+                                squared values of the local estimators.
+\param[in]  rational_constant   Float, multiplicative constant in front of
+                                the rational sum.
+
+returns     fractional_est      Value of the partial fractional estimator.
+========================================================================
+"""
+def compute_est(ls_eta_param_vects, rational_constant):
+    sums_param = [sum(eta_param_vect) for eta_param_vect in ls_eta_param_vects]
+    fractional_est = rational_constant * np.sqrt(sum(sums_param))
+    return fractional_est
+
+
+"""
+========================================================================
+meshes_refinement:  Adaptively refine the meshes based on a list of marked
+                    cells for each parametric mesh.
+
+\param[in,out]  meshes                  List, input the list of meshes,
+                                        output the list of adaptively
+                                        refined meshes.
+\param[in,out]  mesh_ref_bools          List of booleans, True if the mesh
+                                        was refined, False else.
+\param[in]      unsorted_marked_cells   List of lists, unsorted lists of marked
+                                        cells for each mesh.
+========================================================================
+"""
+def mesh_refinement(meshes, mesh_ref_bools, unsorted_marked_cells):
+    for i, unsorted_cells in enumerate(unsorted_marked_cells):
+        if not len(unsorted_cells) == 0:
+            printlog(f"\t \t Refinement mesh {i}")
+            mesh_ref_bools[i] = True
+            indices = np.array(np.sort(unsorted_cells), dtype=np.int32)
+            edges = compute_incident_entities(meshes[i], #
+                                            indices, #
+                                            meshes[i].topology.dim, #
+                                            meshes[i].topology.dim - 1)
+
+            meshes[i].topology.create_entities(meshes[i].topology.dim - 1)
+            meshes[i] = dolfinx.mesh.refine(meshes[i], edges)
+        else:
+            mesh_ref_bools[i] = False
+    return meshes, mesh_ref_bools
+
+
+"""
+========================================================================
+refinement_loop:  Refinement loop.
+
+\param[in]      source_data             Python function, the reaction-diffusion
+                                        PDEs source data.
+\param[in]      rational_parameters     Dictionnary, rational scheme 
+                                        parameters.
+\param[in]      fe_deg                  Integer, finite element method degree.
+\param[in]      ref_step_max            Integer, number of mesh 
+                                        refinement steps.
+========================================================================
+"""
+def refinement_loop(source_data, #
+                    rational_parameters, #
+                    fe_degree, #
+                    ref_step_max=3, #
+                    theta=0.35, #
+                    param_pbm_dir="./"):
     workdir = os.getcwd()
 
-    # FE degree
-    k = 1
+    # Unpack the rational parameters
+    ls_c_diff           = rational_parameters["c_1s"]
+    ls_c_react          = rational_parameters["c_2s"]
+    ls_weight           = rational_parameters["weights"]
+    constant            = rational_parameters["constant"]
+    initial_constant    = rational_parameters["initial constant"] # The initial constant is zero in the case of BP scheme.
 
+    # Number of parametric problems
+    num_param_pbms = len(ls_c_diff)
+    printlog(f"Num. parametric problems to solve: {num_param_pbms}")
+
+    # Initialize list of booleans
+    mesh_ref_bools = np.ones(num_param_pbms).astype(bool)
+    
+    # Fill the list of meshes with inital 8x8 meshes
+    printlog("Meshes initialization")
+    meshes = []
+    for i in range(num_param_pbms):
+        mesh = create_unit_square(MPI.COMM_WORLD, 4, 4)
+        meshes.append(mesh)
+
+    # Refinement loop
+    meshes_bools_history                    = np.zeros((ref_step_max, num_param_pbms)).astype(int)
+    global_weighted_parametric_est_history  = np.zeros((ref_step_max, num_param_pbms))
+    global_parametric_est_history           = np.zeros((ref_step_max, num_param_pbms))
+
+    printlog("Entering refinement loop")
+    for ref_step in range(ref_step_max):
+        # List of local estimators
+        ls_eta_param_vects = []
+
+        # List of global parametric weighted estimators
+        ls_global_weighted_eta_param    = np.zeros(num_param_pbms)
+        ls_global_eta_param             = np.zeros(num_param_pbms)
+
+        # Parametric problems loop
+        for mesh, mesh_ref_bool, c_diff, c_react, weight, pbm_num in zip(meshes, #
+                                                                         mesh_ref_bools, #
+                                                                         ls_c_diff, #
+                                                                         ls_c_react, #
+                                                                         ls_weight, #
+                                                                         range(num_param_pbms)):                  
+            printlog(f"\t Refinement step: {ref_step}, problem: {pbm_num}/{num_param_pbms}")
+
+            # Solve parametric problem
+            printlog(f"\t Solve")
+            u_param = solve_parametric(fe_degree, source_data, mesh, c_diff, c_react)
+
+            # Estimate the parametric L2 error
+            printlog(f"\t Estimate")
+            eta_param, e_h_f = estimate_parametric(source_data, c_diff, c_react, u_param)
+            
+            sq_eta_param_vect           = (eta_param.vector.array)**2
+            weighted_sq_eta_param_vect  = sq_eta_param_vect * weight**2
+
+            ls_eta_param_vects.append(weighted_sq_eta_param_vect)
+            ls_global_weighted_eta_param[pbm_num] = np.sqrt(sum(weighted_sq_eta_param_vect))
+            ls_global_eta_param[pbm_num] = np.sqrt(sum(sq_eta_param_vect))
+
+        for mesh, mesh_ref_bool, i in zip(meshes, mesh_ref_bools, range(len(meshes))):
+            param_pbm_subdir = f"{str(i).zfill(4)}"
+            # Save the mesh
+            with XDMFFile(MPI.COMM_WORLD, os.path.join(param_pbm_dir, param_pbm_subdir, "meshes", f"mesh_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
+                of.write_mesh(mesh)
+            # Save the parametric solutions
+            with XDMFFile(mesh.comm, os.path.join(param_pbm_dir, param_pbm_subdir, "solutions", f"solution_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
+                of.write_mesh(mesh)
+                of.write_function(u_param)
+            # Save the local estimators and BW solutions
+            with XDMFFile(mesh.comm, os.path.join(param_pbm_dir, param_pbm_subdir, "estimators", f"estimator_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
+                of.write_mesh(mesh)
+                of.write_function(eta_param)
+            with XDMFFile(mesh.comm, os.path.join(param_pbm_dir, param_pbm_subdir, "local_bw_solutions", f"local_bw_solution_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
+                of.write_mesh(mesh)
+                of.write_function(e_h_f)
+
+        # Marking
+        printlog('\t Marking')
+        unsorted_marked_cells = marking(ls_eta_param_vects, num_param_pbms, constant, theta=theta)
+
+        # Refinement
+        printlog("\t Refinement")
+        meshes, mesh_ref_bools = mesh_refinement(meshes, mesh_ref_bools, unsorted_marked_cells)
+    
+        # Store infos
+        global_parametric_est_history[ref_step,:]            = ls_global_eta_param
+        global_weighted_parametric_est_history[ref_step,:]   = ls_global_weighted_eta_param
+        meshes_bools_history[ref_step,:]                     = mesh_ref_bools
+
+    return meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history
+
+def printlog(log_line):
+    with open("log.txt", "a+") as logf:
+        logf.write(f"{log_line}\n")
+
+if __name__ == "__main__":
     # Fractional power
-    s = 0.5
+    s = 0.3
+    # Rational scheme fineness parameter
+    fineness_ra_sch = 0.35
+    # FEM degree
+    fe_degree = 1
+    # Maximum number of refinement steps
+    ref_step_max = 40
+    # Dörfler marking parameter
+    theta = 0.5
 
-    # Max number refinement steps
-    ref_step_max = 3
+    workdir = os.getcwd()
+    param_pbm_dir = os.path.join(workdir, f"parametric_problems_{str(int(10*s))}")
 
-    # Rational scheme parameters
-    fineness_parameter = 0.3
-    rational_parameters, _ = BP_rational_approximation(s, fineness_parameter)
-
-    ls_c_1           = rational_parameters["c_1s"]
-    ls_c_2           = rational_parameters["c_2s"]
-    ls_weight        = rational_parameters["weights"]
-    constant         = rational_parameters["constant"]
-    initial_constant = rational_parameters["initial constant"] # The initial constant is zero in the case of BP scheme.
-
-    # List of indices encoding which mesh to use
-    refinement_indices = np.zeros_like(ls_c_1).astype(int)
+    with open("log.txt", 'w') as logf:
+        logf.write("Multi-mesh refinement algorithm log.\n")
+    
+    # Empty results directory
+    if os.path.isdir(param_pbm_dir):
+        shutil.rmtree(param_pbm_dir)
+        os.makedirs(param_pbm_dir)
+    else:
+        os.makedirs(param_pbm_dir)
 
     # Data
-    def f(x):
+    def source_data(x):
         values = np.ones(x.shape[1])
         values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
         values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
         return values
+    
+    # Compute the rational parameters
+    printlog(f"Computation rational parameters, fineness param = {fineness_ra_sch}")
+    rational_parameters, _ = BP_rational_approximation(s, fineness_ra_sch)
+    meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history = refinement_loop(source_data, rational_parameters, fe_degree, ref_step_max=ref_step_max, theta=theta, param_pbm_dir=param_pbm_dir)
 
-    # Initial mesh
-    initial_mesh = create_unit_square(MPI.COMM_WORLD, 8, 8)
+    meshes_num_refinement = np.sum(meshes_bools_history.astype(int), axis=0)
 
-    with XDMFFile(MPI.COMM_WORLD, os.path.join(workdir, "meshes", f"mesh_{str(0).zfill(4)}.xdmf"), "w") as of:
-        of.write_mesh(initial_mesh)
+    ls_c_diff       = rational_parameters["c_1s"][:]
+    ls_c_react      = rational_parameters["c_2s"][:]
+    ls_weights      = rational_parameters["weights"][:]
+    param_pbm_nums  = np.arange(len(ls_c_diff))
 
-    for ref_step in range(ref_step_max):
-        fractional_output_dir = os.path.join(workdir, "fractional_solutions", f"{str(ref_step).zfill(4)}")
-        ls_eta_param = []
-
-        index_max = max(refinement_indices) # NOTE: here index_max could be replaced with ref_step.
-        with XDMFFile(MPI.COMM_WORLD, os.path.join(workdir, "meshes", f"mesh_{str(index_max).zfill(4)}.xdmf"), "r") as fi:
-            finest_mesh = fi.read_mesh()
-
-        element_f = ufl.FiniteElement("DG", ufl.triangle, 2)
-        V_f       = FunctionSpace(finest_mesh, element_f)
-        e_frac_f  = Function(V_f)
-        refinement_bool = False
-        parametric_estimators = []
-        parametric_bw_solutions = []
-        for c_1, c_2, weight, refinement_index, pbm_num in zip(ls_c_1, ls_c_2, ls_weight, refinement_indices, range(len(ls_c_1))):
-            # Output dirs
-            meshes_dir = os.path.join(workdir, "meshes")
-            param_pbm_output_dir = os.path.join(workdir, "parametric_problems", f"{str(pbm_num).zfill(4)}", f"refinement_{str(ref_step).zfill(4)}")
-
-            # Read the mesh corresponding to the refinement_index
-            with XDMFFile(MPI.COMM_WORLD, os.path.join(meshes_dir, f"mesh_{str(refinement_index).zfill(4)}.xdmf"), "r") as fi:
-                mesh = fi.read_mesh()
-            
-            # Initialize parameters of the parametric problem
-            cst_1 = Constant(mesh, c_1)
-            cst_2 = Constant(mesh, c_2)
-
-            # Solve the parametric problem
-            u_param = solve_parametric(mesh, cst_1, cst_2)
-            with XDMFFile(mesh.comm, os.path.join(param_pbm_output_dir, f"u_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
-                of.write_mesh(mesh)
-                of.write_function(u_param)
-
-            # Estimate the parametric L2 error
-            eta_param, e_h_f = estimate_parametric(cst_1, cst_2, u_param)
-            with XDMFFile(mesh.comm, os.path.join(param_pbm_output_dir, f"eta_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
-                of.write_mesh(mesh)
-                of.write_function(eta_param)
-            with XDMFFile(mesh.comm, os.path.join(param_pbm_output_dir, f"e_h_f_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
-                of.write_mesh(mesh)
-                of.write_function(e_h_f)
-        
-            # Computation fractional estimator
-            if (refinement_index == ref_step):  # If the refinement_index is maximal (i.e. e_h_f has been computed on the finest mesh), then we keep e_h_f as it is
-                e_frac_f.vector.axpy(weight, e_h_f.vector)
-            # else:                               # If not, we need to interpolate e_h_f to the finest mesh
-                # e_h_f_int = interpolate(e_h_f) # TODO: add inter-mesh interpolation.
-                # e_frac_f.vector.axpy(weight, e_h_f_int.vector)
-
-            parametric_estimators.append(np.sqrt(eta_param.vector.sum()))
-            parametric_bw_solutions.append(e_h_f)
-
-        parametric_refinement(e_frac_f, parametric_bw_solutions, parametric_estimators, refinement_indices, refinement_bool)
-
-        # Fractional BW solution
-        e_h_f.vector.scale(constant)
-
-        # Fractional error estimator
-
-
-        with XDMFFile(finest_mesh.comm, os.path.join(fractional_output_dir, "e_h_f.xdmf"), "w") as of:
-            of.write_mesh(finest_mesh)
-            of.write_function(e_h_f)
+    results_dir_str = f"results_frac_pw_{str(int(10*s))}"
+    if os.path.isdir(results_dir_str):
+        shutil.rmtree(results_dir_str)
+        os.makedirs(results_dir_str)
+    else:
+        os.makedirs(results_dir_str)
+    np.save(os.path.join(results_dir_str, "meshes_num_refinement.npy"),                    meshes_num_refinement)
+    np.save(os.path.join(results_dir_str, "global_weighted_parametric_est_history.npy"),   global_weighted_parametric_est_history)
+    np.save(os.path.join(results_dir_str, "global_parametric_est_history.npy"),            global_parametric_est_history)
+    np.save(os.path.join(results_dir_str, "ls_c_diff.npy"),                                ls_c_diff)
+    np.save(os.path.join(results_dir_str, "ls_c_react.npy"),                               ls_c_react)
+    np.save(os.path.join(results_dir_str, "ls_weights.npy"),                               ls_weights)
