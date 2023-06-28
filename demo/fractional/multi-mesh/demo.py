@@ -62,6 +62,9 @@ def solve_parametric(fe_degree, source_data, mesh, c_diff, c_react):
     dx = Measure("dx", domain=mesh)
     element = ufl.FiniteElement("CG", mesh.ufl_cell(), fe_degree)
     V = FunctionSpace(mesh, element)
+
+    dof_num = V.dofmap.index_map.size_global
+
     u = TrialFunction(V)
     v = TestFunction(V)
 
@@ -110,7 +113,7 @@ def solve_parametric(fe_degree, source_data, mesh, c_diff, c_react):
     u_param.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                                mode=PETSc.ScatterMode.FORWARD)
     
-    return u_param
+    return u_param, dof_num
 
 
 """
@@ -353,6 +356,8 @@ def refinement_loop(source_data, #
     meshes_bools_history                    = np.zeros((ref_step_max, num_param_pbms)).astype(int)
     global_weighted_parametric_est_history  = np.zeros((ref_step_max, num_param_pbms))
     global_parametric_est_history           = np.zeros((ref_step_max, num_param_pbms))
+    ls_frac_global_est                      = np.zeros(ref_step_max)
+    ls_total_dof_num                        = np.zeros(ref_step_max)
 
     printlog("Entering refinement loop")
     for ref_step in range(ref_step_max):
@@ -362,6 +367,7 @@ def refinement_loop(source_data, #
         # List of global parametric weighted estimators
         ls_global_weighted_eta_param    = np.zeros(num_param_pbms)
         ls_global_eta_param             = np.zeros(num_param_pbms)
+        total_dof_num = 0
 
         # Parametric problems loop
         for mesh, mesh_ref_bool, c_diff, c_react, weight, pbm_num in zip(meshes, #
@@ -374,7 +380,8 @@ def refinement_loop(source_data, #
 
             # Solve parametric problem
             printlog(f"\t Solve")
-            u_param = solve_parametric(fe_degree, source_data, mesh, c_diff, c_react)
+            u_param, dof_num = solve_parametric(fe_degree, source_data, mesh, c_diff, c_react)
+            total_dof_num += dof_num
 
             # Estimate the parametric L2 error
             printlog(f"\t Estimate")
@@ -416,8 +423,12 @@ def refinement_loop(source_data, #
         global_parametric_est_history[ref_step,:]            = ls_global_eta_param
         global_weighted_parametric_est_history[ref_step,:]   = ls_global_weighted_eta_param
         meshes_bools_history[ref_step,:]                     = mesh_ref_bools
+    
+        frac_global_est = constant * sum(ls_global_weighted_eta_param)
+        ls_frac_global_est[ref_step] = frac_global_est
+        ls_total_dof_num[ref_step] = total_dof_num
 
-    return meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history
+    return meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num
 
 def printlog(log_line):
     with open("log.txt", "a+") as logf:
@@ -425,7 +436,7 @@ def printlog(log_line):
 
 if __name__ == "__main__":
     # Fractional power
-    s = 0.3
+    s = 0.7
     # Rational scheme fineness parameter
     fineness_ra_sch = 0.35
     # FEM degree
@@ -458,7 +469,7 @@ if __name__ == "__main__":
     # Compute the rational parameters
     printlog(f"Computation rational parameters, fineness param = {fineness_ra_sch}")
     rational_parameters, _ = BP_rational_approximation(s, fineness_ra_sch)
-    meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history = refinement_loop(source_data, rational_parameters, fe_degree, ref_step_max=ref_step_max, theta=theta, param_pbm_dir=param_pbm_dir)
+    meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num = refinement_loop(source_data, rational_parameters, fe_degree, ref_step_max=ref_step_max, theta=theta, param_pbm_dir=param_pbm_dir)
 
     meshes_num_refinement = np.sum(meshes_bools_history.astype(int), axis=0)
 
@@ -479,3 +490,5 @@ if __name__ == "__main__":
     np.save(os.path.join(results_dir_str, "ls_c_diff.npy"),                                ls_c_diff)
     np.save(os.path.join(results_dir_str, "ls_c_react.npy"),                               ls_c_react)
     np.save(os.path.join(results_dir_str, "ls_weights.npy"),                               ls_weights)
+    np.save(os.path.join(results_dir_str, "frac_global_est.npy"),                          ls_frac_global_est)
+    np.save(os.path.join(results_dir_str, "total_dof_num.npy"),                            ls_total_dof_num)
