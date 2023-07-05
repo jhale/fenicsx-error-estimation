@@ -61,7 +61,7 @@ def parametric_details(s, results_dir_str):
 
 def convergence(s, results_dir_str):
     ls_frac_global_est = np.load(os.path.join(results_dir_str, "frac_global_est.npy"))
-    ls_total_dof_num   = np.load(os.path.join(results_dir_str, "total_dof_num.npy"))
+    ls_total_dof_num   = np.load(os.path.join(results_dir_str, "union_dof_num.npy"))
 
     fig = plt.figure()
 
@@ -69,7 +69,7 @@ def convergence(s, results_dir_str):
     ax = fig.add_subplot(1, 1, 1)
 
     # Linear regression on the 10 last values
-    fit = np.polyfit(np.log(ls_total_dof_num[-10:]), np.log(ls_frac_global_est[-10:]), 1)
+    fit = np.polyfit(np.log(ls_total_dof_num[-20:]), np.log(ls_frac_global_est[-20:]), 1)
     print(fit)
 
     ax.loglog(ls_total_dof_num, ls_frac_global_est, "^-", color="red", label=r"$\eta^{\mathrm{bw}}_{\mathcal U}$")
@@ -95,4 +95,3 @@ if __name__ == "__main__":
         results_dir_str = f"results_frac_pw_{str(int(10*s))}"
         parametric_details(s, results_dir_str)
         convergence(s, results_dir_str)
-
