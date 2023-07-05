@@ -189,8 +189,8 @@ def estimate_parametric(source_data, c_diff, c_react, u_param):
 
 """
 ========================================================================
-marking:    Mark the meshes with respect to the given parametric estimators
-            using a Dörfler-like algorithm.
+dorfler_marking:    Mark the meshes with respect to the given parametric
+estimators using a Dörfler-like algorithm.
 
 \param[in]  ls_eta_param_vects       List of lists, the weighted
                                      squared values of the local estimators.
@@ -203,7 +203,7 @@ returns     unsorted_marked_cells    List of lists, unsorted lists of marked
                                      cells for each parametric mesh.
 ========================================================================
 """
-def marking(ls_eta_param_vects, num_param_pbms, rational_constant, theta=0.35):
+def dorfler_marking(ls_eta_param_vects, num_param_pbms, rational_constant, theta=0.35):
     # Compute the global estimator value
     global_est = compute_est(ls_eta_param_vects, rational_constant)
     cutoff = theta * global_est
@@ -252,6 +252,76 @@ def marking(ls_eta_param_vects, num_param_pbms, rational_constant, theta=0.35):
         partial_est = compute_est(selected_est_values, rational_constant)
         unsorted_marked_cells[param_index].append(cell_index)
         if partial_est > cutoff:
+            breakpoint = i
+            break
+    
+    return unsorted_marked_cells
+
+"""
+========================================================================
+maximum_marking:    Mark the meshes with respect to the given parametric
+estimators using a maximum strategy
+
+\param[in]  ls_eta_param_vects       List of lists, the weighted
+                                     squared values of the local estimators.
+\param[in]  rational_constant        Float, multiplicative constant in front of
+                                     the rational sum.
+\param[in]  theta                    Float, threshold for marking
+                                     (in (0,1)).
+
+returns     unsorted_marked_cells    List of lists, unsorted lists of marked
+                                     cells for each parametric mesh.
+========================================================================
+"""
+def maximum_marking(ls_eta_param_vects, num_param_pbms, rational_constant, theta=0.8):
+
+    # Compute and concatenate the indices arrays and estimator values array
+    param_indices = []
+    cells_indices = []
+    for i, est in enumerate(ls_eta_param_vects):
+        param_indices.append([i for _ in range(len(est))])
+        cells_indices.append(list(range(len(est))))
+    
+    param_ind_concat        = np.concatenate(param_indices)
+    cells_ind_concat        = np.concatenate(cells_indices)
+    eta_param_vects_concat  = np.concatenate(ls_eta_param_vects)
+
+    # Store the concatenated arrays in a single Nx3 numpy array
+    param_cell_est      = np.zeros((len(eta_param_vects_concat), 3))
+    param_cell_est[:,0] = param_ind_concat
+    param_cell_est[:,1] = cells_ind_concat
+    param_cell_est[:,2] = eta_param_vects_concat
+
+    # Doesn't work in parallel
+    assert MPI.COMM_WORLD.size == 1
+
+    # Sort the estimators values in decreasing order and sorting
+    # the indices accordingly
+    sorted_ind = np.argsort(param_cell_est[:,2])[::-1]
+    param_cell_est = param_cell_est[sorted_ind]
+
+    # Compute the global estimator value
+    max_est = np.max(param_cell_est[:,2])
+    cutoff = theta * max_est
+
+    sorted_param_indices    = param_cell_est[:,0].astype(np.intc)
+    sorted_cells_indices    = param_cell_est[:,1].astype(np.intc)
+    sorted_weighted_sq_est  = param_cell_est[:,2]
+
+    # List of lists of marked meshes cells (each list corresponds to a parametric problem)
+    selected_est_values     = [[] for _ in range(num_param_pbms)]
+    unsorted_marked_cells   = [[] for _ in range(num_param_pbms)]
+
+    rolling_sum = 0.
+    for i, cell_index, param_index, est in zip(range(len(sorted_param_indices)), #
+                                               sorted_cells_indices, #
+                                               sorted_param_indices, #
+                                               sorted_weighted_sq_est):
+        printlog(f"\t \t Dörfler loop step {i} / {len(sorted_param_indices)}")
+
+        selected_est_values[param_index].append(est)
+        unsorted_marked_cells[param_index].append(cell_index)
+        if est < cutoff:
             breakpoint = i
             break
     
@@ -412,8 +482,11 @@ def refinement_loop(source_data, #
                 of.write_function(e_h_f)
 
         # Marking
-        printlog('\t Marking')
-        unsorted_marked_cells = marking(ls_eta_param_vects, num_param_pbms, constant, theta=theta)
+        printlog('\t Dörfler marking')
+        unsorted_marked_cells = dorfler_marking(ls_eta_param_vects, num_param_pbms, constant, theta=theta)
+
+        #printlog('\t Maximum marking')
+        #unsorted_marked_cells = maximum_marking(ls_eta_param_vects, num_param_pbms, constant, theta=theta)
 
         # Refinement
         printlog("\t Refinement")
@@ -445,6 +518,8 @@ if __name__ == "__main__":
     ref_step_max = 40
     # Dörfler marking parameter
     theta = 0.5
+    # Maximum marking parameter
+    # theta = 0.8
 
     workdir = os.getcwd()
     param_pbm_dir = os.path.join(workdir, f"parametric_problems_{str(int(10*s))}")
