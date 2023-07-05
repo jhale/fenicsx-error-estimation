@@ -467,8 +467,7 @@ def refinement_loop(source_data, #
             ls_global_weighted_eta_param[pbm_num] = np.sqrt(sum(weighted_sq_eta_param_vect))
             ls_global_eta_param[pbm_num] = np.sqrt(sum(sq_eta_param_vect))
 
-        for mesh, mesh_ref_bool, i in zip(meshes, mesh_ref_bools, range(len(meshes))):
-            param_pbm_subdir = f"{str(i).zfill(4)}"
+            param_pbm_subdir = f"{str(pbm_num).zfill(4)}"
             # Save the mesh
             with XDMFFile(MPI.COMM_WORLD, os.path.join(param_pbm_dir, param_pbm_subdir, "meshes", f"mesh_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
                 of.write_mesh(mesh)
@@ -509,38 +508,25 @@ def refinement_loop(source_data, #
         ls_frac_global_est[ref_step] = frac_global_est
         ls_total_dof_num[ref_step] = total_dof_num
 
-    return meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num
+    return meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num, ls_union_dof_num
 
 def printlog(log_line):
     with open("log.txt", "a+") as logf:
         logf.write(f"{log_line}\n")
 
 if __name__ == "__main__":
-    # Fractional power
-    s = 0.7
     # Rational scheme fineness parameter
     fineness_ra_sch = 0.35
     # FEM degree
     fe_degree = 1
     # Maximum number of refinement steps
-    ref_step_max = 40
+    ref_step_max = 20
     # Dörfler marking parameter
     theta = 0.5
     # Maximum marking parameter
     # theta = 0.8
 
     workdir = os.getcwd()
-    param_pbm_dir = os.path.join(workdir, f"parametric_problems_{str(int(10*s))}")
-
-    with open("log.txt", 'w') as logf:
-        logf.write("Multi-mesh refinement algorithm log.\n")
-    
-    # Empty results directory
-    if os.path.isdir(param_pbm_dir):
-        shutil.rmtree(param_pbm_dir)
-        os.makedirs(param_pbm_dir)
-    else:
-        os.makedirs(param_pbm_dir)
 
     # Data
     def source_data(x):
