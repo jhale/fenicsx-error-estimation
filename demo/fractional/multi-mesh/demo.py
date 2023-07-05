@@ -428,6 +428,7 @@ def refinement_loop(source_data, #
     global_parametric_est_history           = np.zeros((ref_step_max, num_param_pbms))
     ls_frac_global_est                      = np.zeros(ref_step_max)
     ls_total_dof_num                        = np.zeros(ref_step_max)
+    ls_union_dof_num                        = np.zeros(ref_step_max)
 
     printlog("Entering refinement loop")
     for ref_step in range(ref_step_max):
@@ -438,6 +439,8 @@ def refinement_loop(source_data, #
         ls_global_weighted_eta_param    = np.zeros(num_param_pbms)
         ls_global_eta_param             = np.zeros(num_param_pbms)
         total_dof_num = 0
+
+        concatenated = np.empty((1,3))
 
         # Parametric problems loop
         for mesh, mesh_ref_bool, c_diff, c_react, weight, pbm_num in zip(meshes, #
@@ -480,6 +483,11 @@ def refinement_loop(source_data, #
             with XDMFFile(mesh.comm, os.path.join(param_pbm_dir, param_pbm_subdir, "local_bw_solutions", f"local_bw_solution_{str(ref_step).zfill(4)}.xdmf"), "w") as of:
                 of.write_mesh(mesh)
                 of.write_function(e_h_f)
+            
+            concatenated = np.concatenate((mesh.geometry.x[:], concatenated))
+        union = np.unique(concatenated, axis=0)
+        
+        ls_union_dof_num[ref_step] = union.shape[0]
 
         # Marking
         printlog('\t Dörfler marking')
@@ -540,30 +548,44 @@ if __name__ == "__main__":
         values[np.where(np.logical_and(x[0] < 0.5, x[1] > 0.5))] = -1.0
         values[np.where(np.logical_and(x[0] > 0.5, x[1] < 0.5))] = -1.0
         return values
-    
-    # Compute the rational parameters
-    printlog(f"Computation rational parameters, fineness param = {fineness_ra_sch}")
-    rational_parameters, _ = BP_rational_approximation(s, fineness_ra_sch)
-    meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num = refinement_loop(source_data, rational_parameters, fe_degree, ref_step_max=ref_step_max, theta=theta, param_pbm_dir=param_pbm_dir)
 
-    meshes_num_refinement = np.sum(meshes_bools_history.astype(int), axis=0)
+    for s in [0.3, 0.5, 0.7]:
+        param_pbm_dir = os.path.join(workdir, f"parametric_problems_{str(int(10*s))}")
 
-    ls_c_diff       = rational_parameters["c_1s"][:]
-    ls_c_react      = rational_parameters["c_2s"][:]
-    ls_weights      = rational_parameters["weights"][:]
-    param_pbm_nums  = np.arange(len(ls_c_diff))
+        with open("log.txt", 'w') as logf:
+            logf.write("Multi-mesh refinement algorithm log.\n")
+        
+        # Empty results directory
+        if os.path.isdir(param_pbm_dir):
+            shutil.rmtree(param_pbm_dir)
+            os.makedirs(param_pbm_dir)
+        else:
+            os.makedirs(param_pbm_dir)
+        
+        # Compute the rational parameters
+        printlog(f"Computation rational parameters, fineness param = {fineness_ra_sch}")
+        rational_parameters, _ = BP_rational_approximation(s, fineness_ra_sch)
+        meshes_bools_history, global_weighted_parametric_est_history, global_parametric_est_history, ls_frac_global_est, ls_total_dof_num, ls_union_dof_num = refinement_loop(source_data, rational_parameters, fe_degree, ref_step_max=ref_step_max, theta=theta, param_pbm_dir=param_pbm_dir)
 
-    results_dir_str = f"results_frac_pw_{str(int(10*s))}"
-    if os.path.isdir(results_dir_str):
-        shutil.rmtree(results_dir_str)
-        os.makedirs(results_dir_str)
-    else:
-        os.makedirs(results_dir_str)
-    np.save(os.path.join(results_dir_str, "meshes_num_refinement.npy"),                    meshes_num_refinement)
-    np.save(os.path.join(results_dir_str, "global_weighted_parametric_est_history.npy"),   global_weighted_parametric_est_history)
-    np.save(os.path.join(results_dir_str, "global_parametric_est_history.npy"),            global_parametric_est_history)
-    np.save(os.path.join(results_dir_str, "ls_c_diff.npy"),                                ls_c_diff)
-    np.save(os.path.join(results_dir_str, "ls_c_react.npy"),                               ls_c_react)
-    np.save(os.path.join(results_dir_str, "ls_weights.npy"),                               ls_weights)
-    np.save(os.path.join(results_dir_str, "frac_global_est.npy"),                          ls_frac_global_est)
-    np.save(os.path.join(results_dir_str, "total_dof_num.npy"),                            ls_total_dof_num)
+        meshes_num_refinement = np.sum(meshes_bools_history.astype(int), axis=0)
+
+        ls_c_diff       = rational_parameters["c_1s"][:]
+        ls_c_react      = rational_parameters["c_2s"][:]
+        ls_weights      = rational_parameters["weights"][:]
+        param_pbm_nums  = np.arange(len(ls_c_diff))
+
+        results_dir_str = f"results_frac_pw_{str(int(10*s))}"
+        if os.path.isdir(results_dir_str):
+            shutil.rmtree(results_dir_str)
+            os.makedirs(results_dir_str)
+        else:
+            os.makedirs(results_dir_str)
+        np.save(os.path.join(results_dir_str, "meshes_num_refinement.npy"),                    meshes_num_refinement)
+        np.save(os.path.join(results_dir_str, "global_weighted_parametric_est_history.npy"),   global_weighted_parametric_est_history)
+        np.save(os.path.join(results_dir_str, "global_parametric_est_history.npy"),            global_parametric_est_history)
+        np.save(os.path.join(results_dir_str, "ls_c_diff.npy"),                                ls_c_diff)
+        np.save(os.path.join(results_dir_str, "ls_c_react.npy"),                               ls_c_react)
+        np.save(os.path.join(results_dir_str, "ls_weights.npy"),                               ls_weights)
+        np.save(os.path.join(results_dir_str, "frac_global_est.npy"),                          ls_frac_global_est)
+        np.save(os.path.join(results_dir_str, "total_dof_num.npy"),                            ls_total_dof_num)
+        np.save(os.path.join(results_dir_str, "union_dof_num.npy"),                            ls_union_dof_num)
