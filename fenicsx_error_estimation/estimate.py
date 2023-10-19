@@ -15,7 +15,7 @@ import fenicsx_error_estimation.cpp
 ffi = cffi.FFI()
 
 
-def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict = {}):
+def _create_form(form, form_compiler_params: dict = {}, jit_params: dict = {}):
     """Create form without concrete Function Space"""
     sd = form.subdomain_data()
     subdomains, = list(sd.values())
@@ -25,10 +25,10 @@ def _create_form(form, form_compiler_parameters: dict = {}, jit_parameters: dict
         raise RuntimeError("Expecting to find a Mesh in the form.")
 
     ufc_form = dolfinx.jit.ffcx_jit(
-        mesh.mpi_comm(),
+        mesh.comm,
         form,
-        form_compiler_parameters=form_compiler_parameters,
-        jit_parameters=jit_parameters)[0]
+        form_compiler_params=form_compiler_params,
+        jit_params=jit_params)[0]
 
     original_coefficients = form.coefficients()
 
@@ -90,7 +90,6 @@ def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None, diagona
     Caller must pass both e_h and e_D or neither (None).
     """
     mesh = eta_h.function_space.mesh
-    mpi_comm = mesh.mpi_comm()
 
     a_e_dolfin = _create_form(a_e)
     L_e_dolfin = _create_form(L_e)
@@ -98,7 +97,7 @@ def estimate(eta_h, a_e, L_e, L_eta, N, bc_entities, e_h=None, e_D=None, diagona
     element_f_cg = change_regularity(a_e.arguments()[0].ufl_element(), "CG")
 
     # Finite element for local solves
-    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(MPI.COMM_WORLD, element_f_cg)
+    cg_element_and_dofmap, _, _ = dolfinx.jit.ffcx_jit(mesh.comm, element_f_cg)
     cg_element = cg_element_and_dofmap[0]
     cg_dofmap = cg_element_and_dofmap[1]
 

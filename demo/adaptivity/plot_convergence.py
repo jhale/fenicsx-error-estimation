@@ -1,8 +1,8 @@
 # Copyright 2019-2020, Jack S. Hale, Raphaël Bulle
 # SPDX-License-Identifier: LGPL-3.0-or-later
 import matplotlib.cm as cm
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from mpltools import annotation
 

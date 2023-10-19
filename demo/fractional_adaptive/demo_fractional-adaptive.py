@@ -5,23 +5,22 @@
 # element scheme outlined in Bulle et al. 2022. The problem specification is
 # taken from Bonito and Pasciak 2013.
 
+import fenicsx_error_estimation
 import numpy as np
 
 import dolfinx
-from dolfinx import Constant, DirichletBC, Function, FunctionSpace, RectangleMesh
-from dolfinx.cpp.mesh import CellType
-from dolfinx.fem import (apply_lifting, assemble_matrix, assemble_vector, Form,
-                         locate_dofs_topological, set_bc)
+import ufl
+from dolfinx.fem import (Constant, Function, FunctionSpace, apply_lifting,
+                         dirichletbc, form, locate_dofs_topological, set_bc)
+from dolfinx.fem.petsc import assemble_matrix, assemble_vector
 from dolfinx.io import XDMFFile
-from dolfinx.mesh import locate_entities_boundary
+from dolfinx.mesh import (CellType, compute_incident_entities,
+                          create_rectangle, locate_entities_boundary)
+from ufl import (Coefficient, Measure, TestFunction, TrialFunction, avg, div,
+                 grad, inner, jump)
 
 from mpi4py import MPI
 from petsc4py import PETSc
-
-import fenicsx_error_estimation
-
-import ufl
-from ufl import avg, div, grad, inner, jump, Measure, TrialFunction, TestFunction, Coefficient
 
 # Fractional power (in (0, 1))
 s = 0.5
@@ -37,9 +36,9 @@ theta = 0.3
 
 
 # Structured mesh
-mesh = RectangleMesh(
+mesh = create_rectangle(
     MPI.COMM_WORLD,
-    [np.array([0, 0, 0]), np.array([1, 1, 0])], [4, 4],
+    [np.array([0.0, 0.0]), np.array([1.0, 1.0])], [4, 4],
     CellType.triangle)
 
 
@@ -135,8 +134,8 @@ while np.greater(eta, tol):
     cst_2 = Constant(mesh, 0.)
     e_h = Coefficient(V_f)
 
-    a_form = Form(cst_1 * inner(grad(u), grad(v)) * dx + cst_2 * inner(u, v) * dx)
-    L_form = Form(inner(f, v) * dx)
+    a_form = form(cst_1 * inner(grad(u), grad(v)) * dx + cst_2 * inner(u, v) * dx)
+    L_form = form(inner(f, v) * dx)
 
     # Homogeneous zero Dirichlet boundary condition
     u0 = Function(V)
@@ -144,7 +143,7 @@ while np.greater(eta, tol):
     facets = locate_entities_boundary(
         mesh, 1, lambda x: np.ones(x.shape[1], dtype=bool))
     dofs = locate_dofs_topological(V, 1, facets)
-    bcs = [DirichletBC(u0, dofs)]
+    bcs = [dirichletbc(u0, dofs)]
 
     # Homogeneous zero BW estimator boundary condition
     boundary_entities = locate_entities_boundary(
@@ -152,13 +151,13 @@ while np.greater(eta, tol):
     boundary_entities_sorted = np.sort(boundary_entities)
 
     # Fractional solution
-    u_h = Function(V)
+    u_h = Function(V, name="fractional_solution")
     # Parametric solution
-    u_param = Function(V)
+    u_param = Function(V, name="parametric_solution")
     # Bank-Weiser error solution for fractional problem
-    bw_f = Function(V_f)
+    bw_f = Function(V_f, name="bank_weiser_error")
     # L^2 error estimator for fractional problem proposed in Bulle et al. 2022
-    eta_e = Function(V_e)
+    eta_e = Function(V_e, name="error_indicator")
 
     # Functions to store results
     # L2 norm of parametric Bank-Weiser solution (unused in this methodology)
@@ -171,7 +170,7 @@ while np.greater(eta, tol):
         # Parametric problems solves
         cst_1.value = c_1
         cst_2.value = c_2
-        # TODO: Sparsity pattern could be moved outside loop
+
         A = assemble_matrix(a_form, bcs=bcs)
         A.assemble()
         b = assemble_vector(L_form)
@@ -221,27 +220,27 @@ while np.greater(eta, tol):
     # Scale fractional solution
     print(f'Refinement step {ref_step}: Solution computation and solve...')
     u_h.vector.scale(constant)
-    with XDMFFile(MPI.COMM_WORLD, f"./output/u_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/u_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(u_h)
 
     # Scale Bank-Weiser solution
     print(f'Refinement step {ref_step}: Estimator computation and solve...')
     bw_f.vector.scale(constant)
-    with XDMFFile(MPI.COMM_WORLD, f"./output/bw_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/bw_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(bw_f)
 
     # Compute L2 error estimator
-    eta_f = assemble_vector(inner(inner(bw_f, bw_f), v_e) * dx)
+    eta_f = assemble_vector(form(inner(inner(bw_f, bw_f), v_e) * dx))
     eta_e.vector.setArray(eta_f)
-    with XDMFFile(MPI.COMM_WORLD, f"./output/eta_{str(ref_step)}.xdmf", "w") as fo:
+    with XDMFFile(mesh.comm, f"./output/eta_{str(ref_step).zfill(3)}.xdmf", "w") as fo:
         fo.write_mesh(mesh)
         fo.write_function(eta_e)
 
     # Compute L2 error estimator
     # TODO: Not MPI safe
-    eta = np.sqrt(sum(eta_e.vector.array))
+    eta = np.sqrt(eta_e.vector.sum())
     print(f'Refinement step: {ref_step}: Error:', eta)
 
     # Dörfler marking
@@ -260,12 +259,11 @@ while np.greater(eta, tol):
 
     refine_cells = sorted_cells[0:breakpoint + 1]
     indices = np.array(np.sort(refine_cells), dtype=np.int32)
-    markers = np.zeros(indices.shape, dtype=np.int8)
-    markers_tag = dolfinx.MeshTags(mesh, mesh.topology.dim, indices, markers)
+    edges = compute_incident_entities(mesh, indices, mesh.topology.dim, mesh.topology.dim - 1)
 
     # Refine mesh
     print(f'Refinement step {ref_step}: Refinement...')
     mesh.topology.create_entities(mesh.topology.dim - 1)
-    mesh = dolfinx.mesh.refine(mesh, cell_markers=markers_tag)
+    mesh = dolfinx.mesh.refine(mesh, edges)
 
     ref_step += 1
